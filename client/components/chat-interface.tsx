@@ -80,7 +80,7 @@ export function ChatInterface({ query, setQuery, onSubmit, isLoading, hasSearche
     return (
         <div className={cn(
             "transition-all duration-700 ease-in-out w-full max-w-2xl mx-auto z-10",
-            hasSearched ? "sticky top-4" : "flex flex-col items-center justify-center min-h-[60vh]"
+            !hasSearched ? "flex flex-col items-center justify-center min-h-[60vh]" : ""
         )}>
             <input
                 type="file"

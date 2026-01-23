@@ -221,87 +221,108 @@ export default function Home() {
         "transition-all duration-300",
         sidebarOpen ? "ml-64" : "ml-16"
       )}>
-        <main className="relative z-10 flex flex-col p-4 md:p-8 font-sans text-foreground">
-          <ChatInterface
-            query={query}
-            setQuery={setQuery}
-            onSubmit={handleSubmit}
-            isLoading={isLoading}
-            hasSearched={hasSearched}
-          />
+        <main className="relative z-10 flex flex-col min-h-screen font-sans text-foreground max-w-4xl mx-auto px-4 md:px-8">
+          <div className="flex-1 py-8">
+            {!hasSearched && (
+              <div className="flex flex-col items-center justify-center min-h-[60vh]">
+                <ChatInterface
+                  query={query}
+                  setQuery={setQuery}
+                  onSubmit={handleSubmit}
+                  isLoading={isLoading}
+                  hasSearched={false}
+                />
+              </div>
+            )}
 
-          {hasSearched && (
-            <div className="max-w-2xl mx-auto w-full mt-8 space-y-12 animate-in fade-in slide-in-from-bottom-8 duration-700">
-              {messages.map((message, idx) => (
-                <div key={idx} className="space-y-6">
-                  {message.role === 'user' ? (
-                    <div className="flex flex-col gap-2">
-                      <h2 className="text-2xl font-bold tracking-tight text-white px-2 border-l-4 border-emerald-500">
-                        {message.content}
-                      </h2>
-                    </div>
-                  ) : (
-                    <div className="space-y-6">
-                      {message.sources && message.sources.length > 0 && (
-                        <SourceCarousel sources={message.sources} />
-                      )}
-
-                      <div className="relative">
-                        <div className="flex items-center justify-between mb-4">
-                          <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                            <div className="h-5 w-5 flex items-center justify-center">
-                              {isLoading && idx === messages.length - 1 ? (
-                                <RefreshCw className="h-4 w-4 animate-spin text-emerald-400" />
-                              ) : (
-                                <div className="h-2 w-2 bg-gradient-to-r from-emerald-400 to-green-400 rounded-full shadow-lg shadow-emerald-500/50" />
-                              )}
-                            </div>
-                            <span className="text-slate-300">Answer</span>
-                          </div>
-
-                          {message.content && !(isLoading && idx === messages.length - 1) && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={async () => {
-                                await navigator.clipboard.writeText(message.content);
-                                setCopied(true);
-                                setTimeout(() => setCopied(false), 2000);
-                              }}
-                              className="h-8 px-2 text-slate-400 hover:text-white hover:bg-slate-800"
-                            >
-                              {copied ? (
-                                <Check className="h-4 w-4 text-green-400" />
-                              ) : (
-                                <Copy className="h-4 w-4" />
-                              )}
-                              <span className="ml-1 text-xs">{copied ? 'Copied!' : 'Copy'}</span>
-                            </Button>
-                          )}
+            {hasSearched && (
+              <>
+                <div className="space-y-12 pb-32 animate-in fade-in slide-in-from-bottom-8 duration-700">
+                  {messages.map((message, idx) => (
+                    <div key={idx} className="space-y-6">
+                      {message.role === 'user' ? (
+                        <div className="flex flex-col gap-2">
+                          <h2 className="text-2xl font-bold tracking-tight text-white px-2 border-l-4 border-emerald-500">
+                            {message.content}
+                          </h2>
                         </div>
+                      ) : (
+                        <div className="space-y-6">
+                          {message.sources && message.sources.length > 0 && (
+                            <SourceCarousel sources={message.sources} />
+                          )}
 
-                        {message.content ? (
-                          <div className="relative p-5 rounded-xl bg-black/40 border border-emerald-900/30 backdrop-blur-sm">
-                            <div className="prose prose-invert max-w-none text-base leading-relaxed break-words text-emerald-100/90">
-                              <div className="whitespace-pre-wrap">{message.content}</div>
+                          <div className="relative">
+                            <div className="flex items-center justify-between mb-4">
+                              <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                                <div className="h-5 w-5 flex items-center justify-center">
+                                  {isLoading && idx === messages.length - 1 ? (
+                                    <RefreshCw className="h-4 w-4 animate-spin text-emerald-400" />
+                                  ) : (
+                                    <div className="h-2 w-2 bg-gradient-to-r from-emerald-400 to-green-400 rounded-full shadow-lg shadow-emerald-500/50" />
+                                  )}
+                                </div>
+                                <span className="text-slate-300">Answer</span>
+                              </div>
+
+                              {message.content && !(isLoading && idx === messages.length - 1) && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleCopy(message.content)}
+                                  className="h-8 px-2 text-slate-400 hover:text-white hover:bg-slate-800"
+                                >
+                                  {copied ? (
+                                    <Check className="h-4 w-4 text-green-400" />
+                                  ) : (
+                                    <Copy className="h-4 w-4" />
+                                  )}
+                                  <span className="ml-1 text-xs">{copied ? 'Copied!' : 'Copy'}</span>
+                                </Button>
+                              )}
                             </div>
+
+                            {message.content ? (
+                              <div className="relative p-5 rounded-xl bg-black/40 border border-emerald-900/30 backdrop-blur-sm">
+                                <div className="prose prose-invert max-w-none text-base leading-relaxed break-words text-emerald-100/90">
+                                  <div className="whitespace-pre-wrap">{message.content}</div>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="space-y-4 p-5 rounded-xl bg-black/40 border border-emerald-900/30">
+                                <Skeleton className="h-4 w-full bg-emerald-900/30" />
+                                <Skeleton className="h-4 w-[90%] bg-emerald-900/30" />
+                                <Skeleton className="h-4 w-[80%] bg-emerald-900/30" />
+                              </div>
+                            )}
                           </div>
-                        ) : (
-                          <div className="space-y-4 p-5 rounded-xl bg-black/40 border border-emerald-900/30">
-                            <Skeleton className="h-4 w-full bg-emerald-900/30" />
-                            <Skeleton className="h-4 w-[90%] bg-emerald-900/30" />
-                            <Skeleton className="h-4 w-[80%] bg-emerald-900/30" />
-                          </div>
-                        )}
-                      </div>
+                        </div>
+                      )}
+                      {idx < messages.length - 1 && <Separator className="bg-emerald-900/10" />}
                     </div>
-                  )}
-                  {idx < messages.length - 1 && <Separator className="bg-emerald-900/10" />}
+                  ))}
+                  <div ref={bottomRef} className="h-4" />
                 </div>
-              ))}
-              <div ref={bottomRef} className="h-4" />
-            </div>
-          )}
+
+                <div className="fixed bottom-0 left-0 right-0 z-20 pointer-events-none">
+                  <div className={cn(
+                    "mx-auto w-full transition-all duration-300 px-4 pb-8 pt-12 bg-gradient-to-t from-black via-black/80 to-transparent pointer-events-auto",
+                    sidebarOpen ? "pl-[272px] pr-8" : "pl-20 pr-8"
+                  )}>
+                    <div className="max-w-3xl mx-auto">
+                      <ChatInterface
+                        query={query}
+                        setQuery={setQuery}
+                        onSubmit={handleSubmit}
+                        isLoading={isLoading}
+                        hasSearched={true}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
         </main>
       </div>
     </div>
