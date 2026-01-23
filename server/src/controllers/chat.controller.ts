@@ -3,51 +3,114 @@ import { runRAGPipeline } from '../services/rag.service';
 import { ChatRequest } from '../types';
 import { logger } from '../utils/logger';
 import { ApiError } from '../utils/apiError';
+import { AuthenticatedRequest, optionalAuth } from '../middleware/auth.middleware';
+import * as conversationService from '../services/conversation.service';
+import { IMessage } from '../models/conversation.model';
 
 const CONTEXT = 'ChatController';
+
+interface ExtendedChatRequest extends ChatRequest {
+    conversationId?: string;
+}
 
 /**
  * Handles POST /api/chat
  * Runs the RAG pipeline and streams the response.
+ * Optionally saves to conversation if user is authenticated.
  */
 export const handleChat = async (req: Request, res: Response): Promise<void> => {
-    const { query } = req.body as ChatRequest;
+    const authReq = req as AuthenticatedRequest;
+    const { query, conversationId } = req.body as ExtendedChatRequest;
 
     if (!query || typeof query !== 'string' || query.trim().length === 0) {
         res.status(400).json({ error: 'Query is required and must be a non-empty string' });
         return;
     }
 
-    const sanitizedQuery = query.trim().substring(0, 500); // Limit query length
+    const sanitizedQuery = query.trim().substring(0, 500);
     logger.info(`Received chat request: "${sanitizedQuery.substring(0, 50)}..."`, CONTEXT);
 
-    // Set up SSE headers
     res.writeHead(200, {
         'Content-Type': 'text/event-stream',
         'Cache-Control': 'no-cache',
         'Connection': 'keep-alive',
-        'X-Accel-Buffering': 'no', // Disable nginx buffering
+        'X-Accel-Buffering': 'no',
     });
 
-    // Handle client disconnect
     req.on('close', () => {
         logger.debug('Client disconnected', CONTEXT);
     });
 
+    let activeConversationId = conversationId;
+    let fullAnswer = '';
+    let sources: any[] = [];
+    let conversationHistory: IMessage[] | undefined;
+
     try {
-        await runRAGPipeline(sanitizedQuery, res);
+        if (authReq.userId && conversationId) {
+            try {
+                const existingConversation = await conversationService.getConversationById(
+                    conversationId,
+                    authReq.userId
+                );
+
+                if (existingConversation?.messages?.length) {
+                    const messages = existingConversation.messages;
+                    conversationHistory = messages.slice(-6);
+                }
+            } catch (historyError) {
+                logger.error('Failed to load conversation history', CONTEXT, historyError as Error);
+            }
+        }
+
+        const result = await runRAGPipeline(sanitizedQuery, res, (token: string) => {
+            fullAnswer += token;
+        }, (sourcesData: any[]) => {
+            sources = sourcesData;
+        }, conversationHistory);
+
+        if (authReq.userId) {
+            try {
+                if (!activeConversationId) {
+                    const title = sanitizedQuery.substring(0, 50) + (sanitizedQuery.length > 50 ? '...' : '');
+                    const newConvo = await conversationService.createConversation({
+                        clerkUserId: authReq.userId,
+                        title,
+                        initialMessage: { role: 'user', content: sanitizedQuery }
+                    });
+                    activeConversationId = (newConvo._id as any).toString();
+
+                    res.write(JSON.stringify({ type: 'conversationId', data: activeConversationId }) + '\n');
+                } else {
+                    await conversationService.addMessageToConversation({
+                        conversationId: activeConversationId,
+                        clerkUserId: authReq.userId,
+                        message: { role: 'user', content: sanitizedQuery }
+                    });
+                }
+
+                await conversationService.addMessageToConversation({
+                    conversationId: activeConversationId!,
+                    clerkUserId: authReq.userId,
+                    message: { role: 'assistant', content: fullAnswer, sources }
+                });
+
+                logger.info(`Saved conversation ${activeConversationId} for user ${authReq.userId}`, CONTEXT);
+            } catch (saveError) {
+                logger.error('Failed to save conversation', CONTEXT, saveError as Error);
+            }
+        }
+
         res.end();
     } catch (error: any) {
         logger.error(`Pipeline error: ${error.message}`, CONTEXT, error);
 
-        // Try to send error if headers not yet flushed completely
         try {
             res.write(JSON.stringify({
                 type: 'error',
                 data: error.message || 'An unexpected error occurred'
             }) + '\n');
         } catch {
-            // Response already closed
         }
         res.end();
     }

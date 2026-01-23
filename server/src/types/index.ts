@@ -27,3 +27,11 @@ export interface StreamChunk {
     type: 'sources' | 'token' | 'error' | 'status';
     data: any;
 }
+
+export interface RankedSource extends SearchResult {
+    relevanceScore: number;
+    freshnessScore: number;
+    authorityScore: number;
+    totalScore: number;
+    scrapedContent?: string;
+}

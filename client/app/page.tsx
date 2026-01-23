@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
+import { useAuth } from '@clerk/nextjs';
 import { SourceCarousel } from '@/components/source-carousel';
 import { ChatInterface } from '@/components/chat-interface';
 import { Sidebar } from '@/components/sidebar';
@@ -9,6 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { RefreshCw, Copy, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { fetchConversation, Message } from '@/lib/conversations';
 
 interface Source {
   title: string;
@@ -17,6 +19,7 @@ interface Source {
 }
 
 export default function Home() {
+  const { isSignedIn, getToken } = useAuth();
   const [query, setQuery] = useState('');
   const [hasSearched, setHasSearched] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -24,6 +27,8 @@ export default function Home() {
   const [answer, setAnswer] = useState('');
   const [copied, setCopied] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [conversationId, setConversationId] = useState<string | null>(null);
+  const [messages, setMessages] = useState<Message[]>([]);
 
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -37,10 +42,19 @@ export default function Home() {
     setAnswer('');
 
     try {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+
+      if (isSignedIn) {
+        const token = await getToken();
+        if (token) {
+          headers['Authorization'] = `Bearer ${token}`;
+        }
+      }
+
       const response = await fetch('http://localhost:3001/api/chat', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query }),
+        headers,
+        body: JSON.stringify({ query, conversationId }),
       });
 
       if (!response.ok) throw new Error('Network response was not ok');
@@ -71,6 +85,8 @@ export default function Home() {
               setSources(parsed.data);
             } else if (parsed.type === 'token') {
               setAnswer(prev => prev + parsed.data);
+            } else if (parsed.type === 'conversationId') {
+              setConversationId(parsed.data);
             } else if (parsed.type === 'error') {
               console.error("Backend error:", parsed.data);
               setAnswer(prev => prev + "\n[Error: " + parsed.data + "]");
@@ -94,6 +110,42 @@ export default function Home() {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const handleSelectConversation = async (id: string) => {
+    if (!isSignedIn) return;
+
+    try {
+      const token = await getToken();
+      if (!token) return;
+
+      const convo = await fetchConversation(token, id);
+      setConversationId(id);
+      setMessages(convo.messages);
+      setHasSearched(true);
+
+      const lastUserMsg = [...convo.messages].reverse().find(m => m.role === 'user');
+      const lastAssistantMsg = [...convo.messages].reverse().find(m => m.role === 'assistant');
+
+      if (lastUserMsg) setQuery(lastUserMsg.content);
+      if (lastAssistantMsg) {
+        setAnswer(lastAssistantMsg.content);
+        if (lastAssistantMsg.sources) {
+          setSources(lastAssistantMsg.sources);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to load conversation:', error);
+    }
+  };
+
+  const handleNewConversation = () => {
+    setConversationId(null);
+    setQuery('');
+    setAnswer('');
+    setSources([]);
+    setMessages([]);
+    setHasSearched(false);
+  };
+
   useEffect(() => {
     if (isLoading) {
       bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -102,25 +154,26 @@ export default function Home() {
 
   return (
     <div className="min-h-screen relative">
-      {/* Background Image */}
       <div
         className="fixed inset-0 bg-cover bg-center bg-no-repeat"
         style={{ backgroundImage: "url('/back_for_proj.jpg')" }}
       />
-      {/* Dark overlay for readability */}
       <div className="fixed inset-0 bg-black/60 backdrop-blur-[2px]" />
 
-      {/* Sidebar */}
-      <Sidebar isOpen={sidebarOpen} onToggle={() => setSidebarOpen(!sidebarOpen)} />
+      <Sidebar
+        isOpen={sidebarOpen}
+        onToggle={() => setSidebarOpen(!sidebarOpen)}
+        onSelectConversation={handleSelectConversation}
+        onNewConversation={handleNewConversation}
+        activeConversationId={conversationId}
+      />
 
-      {/* Ambient background effects - forest inspired */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
         <div className="absolute top-0 left-1/4 w-96 h-96 bg-emerald-500/10 rounded-full blur-3xl" />
         <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-green-500/10 rounded-full blur-3xl" />
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-lime-500/5 rounded-full blur-3xl" />
       </div>
 
-      {/* Main content with sidebar offset */}
       <div className={cn(
         "transition-all duration-300",
         sidebarOpen ? "ml-64" : "ml-16"
@@ -137,7 +190,6 @@ export default function Home() {
           {hasSearched && (
             <div className="max-w-2xl mx-auto w-full mt-8 space-y-6 animate-in fade-in slide-in-from-bottom-8 duration-700">
 
-              {/* Sources Section */}
               {sources.length > 0 ? (
                 <SourceCarousel sources={sources} />
               ) : isLoading ? (
@@ -156,7 +208,6 @@ export default function Home() {
 
               <Separator className="bg-emerald-900/30" />
 
-              {/* Answer Section */}
               <div className="relative">
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
