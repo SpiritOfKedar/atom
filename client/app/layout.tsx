@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { Alan_Sans } from "next/font/google";
+import { ClerkProvider } from "@clerk/nextjs";
+import { dark } from "@clerk/themes";
 import "./globals.css";
 
 const alanSans = Alan_Sans({
@@ -19,12 +21,23 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="dark">
-      <body
-        className={`${alanSans.variable} ${alanSans.className} antialiased`}
-      >
-        {children}
-      </body>
-    </html>
+    <ClerkProvider
+      appearance={{
+        baseTheme: dark,
+        variables: {
+          colorPrimary: "#10b981",
+          colorBackground: "#0f172a",
+        },
+      }}
+    >
+      <html lang="en" className="dark">
+        <body
+          className={`${alanSans.variable} ${alanSans.className} antialiased`}
+        >
+          {children}
+        </body>
+      </html>
+    </ClerkProvider>
   );
 }
+

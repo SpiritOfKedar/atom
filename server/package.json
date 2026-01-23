@@ -13,11 +13,13 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@clerk/backend": "^2.29.4",
     "axios": "^1.13.2",
     "cheerio": "^1.1.2",
     "cors": "^2.8.6",
     "dotenv": "^17.2.3",
     "express": "^5.2.1",
+    "mongoose": "^9.1.5",
     "openai": "^6.16.0"
   },
   "devDependencies": {
