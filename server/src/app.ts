@@ -4,6 +4,8 @@ import routes from './routes';
 import { env } from './config/env';
 import { logger } from './utils/logger';
 import { ApiError } from './utils/apiError';
+import { requestIdMiddleware } from './middleware/request-id.middleware';
+import { apiLimiter, chatLimiter } from './middleware/rate-limit.middleware';
 
 const app: Application = express();
 
@@ -13,6 +15,13 @@ app.use(cors({
     credentials: true,
 }));
 app.use(express.json({ limit: '10kb' }));
+
+// Request ID tracing
+app.use(requestIdMiddleware);
+
+// Rate Limiting
+app.use('/api', apiLimiter);
+app.use('/api/chat', chatLimiter);
 
 // Request logging
 app.use((req: Request, _res: Response, next: NextFunction) => {

@@ -8,6 +8,10 @@ import * as conversationService from '../services/conversation.service';
 import { IMessage } from '../models/conversation.model';
 import { validateAnswer } from '../services/answer-validation.service';
 import { generateFollowUpQuestions } from '../services/llm.service';
+import mongoose from 'mongoose';
+import { getRedisClient } from '../config/redis';
+import { env } from '../config/env';
+import axios from 'axios';
 
 const CONTEXT = 'ChatController';
 
@@ -87,7 +91,7 @@ export const handleChat = async (req: Request, res: Response): Promise<void> => 
             try {
                 sendStatus(res, 'Validating answer...');
                 const validation = await validateAnswer(fullAnswer, result.ragContexts, sanitizedQuery);
-                
+
                 // Send validation result to client
                 res.write(JSON.stringify({
                     type: 'validation',
@@ -98,7 +102,7 @@ export const handleChat = async (req: Request, res: Response): Promise<void> => 
                         summary: validation.summary,
                     }
                 }) + '\n');
-                
+
                 logger.info(
                     `Answer validation: isValid=${validation.isValid}, ` +
                     `confidence=${validation.confidence.toFixed(2)}`,
@@ -119,13 +123,13 @@ export const handleChat = async (req: Request, res: Response): Promise<void> => 
                     fullAnswer,
                     result.ragContexts
                 );
-                
+
                 // Send follow-up questions to client
                 res.write(JSON.stringify({
                     type: 'followUps',
                     data: followUpQuestions
                 }) + '\n');
-                
+
                 logger.info(`Generated ${followUpQuestions.length} follow-up questions`, CONTEXT);
             } catch (followUpError: any) {
                 logger.warn(`Follow-up question generation failed: ${followUpError.message}`, CONTEXT);
@@ -181,7 +185,7 @@ export const handleChat = async (req: Request, res: Response): Promise<void> => 
 };
 
 /**
- * Health check endpoint
+ * Basic health check endpoint
  */
 export const healthCheck = (_req: Request, res: Response): void => {
     res.json({
@@ -189,4 +193,55 @@ export const healthCheck = (_req: Request, res: Response): void => {
         timestamp: new Date().toISOString(),
         service: 'atom-search-api',
     });
+};
+
+/**
+ * Detailed health check with dependency status
+ */
+export const detailedHealthCheck = async (_req: Request, res: Response): Promise<void> => {
+    const healthData: any = {
+        status: 'ok',
+        timestamp: new Date().toISOString(),
+        service: 'atom-search-api',
+        uptime: process.uptime(),
+        dependencies: {
+            mongodb: 'disconnected',
+            redis: 'not_configured',
+            openai: 'not_configured',
+            serper: 'not_configured',
+        }
+    };
+
+    // Check MongoDB
+    const mongoStatus = mongoose.connection.readyState;
+    const mongoMap: Record<number, string> = {
+        0: 'disconnected',
+        1: 'connected',
+        2: 'connecting',
+        3: 'disconnecting',
+    };
+    healthData.dependencies.mongodb = mongoMap[mongoStatus] || 'unknown';
+    if (mongoStatus !== 1) healthData.status = 'degraded';
+
+    // Check Redis
+    const redisClient = getRedisClient();
+    if (redisClient) {
+        healthData.dependencies.redis = redisClient.status || 'unknown';
+        if (redisClient.status !== 'ready') healthData.status = 'degraded';
+    } else if (env.redisUrl) {
+        healthData.dependencies.redis = 'error';
+        healthData.status = 'degraded';
+    }
+
+    // Check OpenAI Config
+    if (env.openaiApiKey) {
+        healthData.dependencies.openai = 'configured';
+    }
+
+    // Check Serper Config
+    if (env.serperApiKey) {
+        healthData.dependencies.serper = 'configured';
+    }
+
+    res.json(healthData);
 };

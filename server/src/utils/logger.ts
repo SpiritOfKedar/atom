@@ -1,4 +1,5 @@
 import { isDev } from '../config/env';
+import { getRequestId } from '../middleware/request-id.middleware';
 
 type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
@@ -21,9 +22,11 @@ const levelColors: Record<LogLevel, string> = {
 
 const formatMessage = (level: LogLevel, message: string, context?: string): string => {
     const timestamp = new Date().toISOString();
+    const requestId = getRequestId();
+    const requestIdStr = requestId ? `${colors.magenta}[${requestId.substring(0, 8)}]${colors.reset} ` : '';
     const coloredLevel = `${levelColors[level]}[${level.toUpperCase()}]${colors.reset}`;
     const contextStr = context ? `${colors.blue}[${context}]${colors.reset} ` : '';
-    return `${colors.green}${timestamp}${colors.reset} ${coloredLevel} ${contextStr}${message}`;
+    return `${colors.green}${timestamp}${colors.reset} ${requestIdStr}${coloredLevel} ${contextStr}${message}`;
 };
 
 export const logger = {

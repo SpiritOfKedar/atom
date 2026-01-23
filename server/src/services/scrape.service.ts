@@ -3,7 +3,7 @@ import * as cheerio from 'cheerio';
 import { ScrapedContent } from '../types';
 import { logger } from '../utils/logger';
 import { getCachedScrapedContent, cacheScrapedContent } from './cache.service';
-import { retry } from '../utils/retry';
+import { retry, retryMultiple } from '../utils/retry';
 
 const CONTEXT = 'ScrapeService';
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
@@ -88,9 +88,9 @@ const extractAuthor = ($: cheerio.Root): string | undefined => {
         ];
 
         for (const selector of authorSelectors) {
-            const author = $(selector).attr('content') || 
-                          $(selector).attr('name') ||
-                          $(selector).text().trim();
+            const author = $(selector).attr('content') ||
+                $(selector).attr('name') ||
+                $(selector).text().trim();
             if (author && author.length > 0 && author.length < 100) {
                 return author;
             }
@@ -134,8 +134,8 @@ const determineCategory = (url: string): 'news' | 'academic' | 'blog' | 'forum' 
         }
 
         // Academic domains
-        if (hostname.endsWith('.edu') || 
-            hostname.includes('scholar') || 
+        if (hostname.endsWith('.edu') ||
+            hostname.includes('scholar') ||
             hostname.includes('academic') ||
             hostname.includes('research') ||
             path.includes('/research/') ||
@@ -145,7 +145,7 @@ const determineCategory = (url: string): 'news' | 'academic' | 'blog' | 'forum' 
         }
 
         // Blog patterns
-        if (path.includes('/blog/') || 
+        if (path.includes('/blog/') ||
             path.includes('/post/') ||
             path.includes('/article/') ||
             hostname.includes('blog') ||
@@ -277,25 +277,25 @@ export const scrapePage = async (url: string): Promise<ScrapedContent> => {
         const rawContent = mainContent
             .replace(/\s+/g, ' ')
             .trim();
-        
+
         // Use base extraction for now (will be optimized later with query context)
         result.content = rawContent.substring(0, MAX_CONTENT_LENGTH_BASE);
 
         if (result.content.length > 0) {
             result.success = true;
-            
+
             // Extract enhanced metadata
             result.publishedDate = extractPublishedDate($, url);
             result.author = extractAuthor($);
             result.category = determineCategory(url);
             result.readingTime = calculateReadingTime(result.content);
-            
+
             logger.debug(
                 `Scraped ${result.content.length} chars from ${url} ` +
                 `(category: ${result.category}, reading time: ${result.readingTime}min)`,
                 CONTEXT
             );
-            
+
             // Cache successful scrapes
             await cacheScrapedContent(url, result);
         } else {
@@ -328,18 +328,18 @@ const scoreSentence = (sentence: string, query: string): number => {
     const sentenceLower = sentence.toLowerCase();
     const queryLower = query.toLowerCase();
     const queryWords = queryLower.split(/\s+/).filter(w => w.length > 2);
-    
+
     let score = 0;
-    
+
     // Exact phrase match (highest weight)
     if (sentenceLower.includes(queryLower)) {
         score += 50;
     }
-    
+
     // Individual word matches
     const matchedWords = queryWords.filter(word => sentenceLower.includes(word)).length;
     score += (matchedWords / queryWords.length) * 30;
-    
+
     // Keyword density (how many times query words appear)
     let totalOccurrences = 0;
     queryWords.forEach(word => {
@@ -350,7 +350,7 @@ const scoreSentence = (sentence: string, query: string): number => {
         }
     });
     score += Math.min(totalOccurrences * 5, 20);
-    
+
     // Sentence length bonus (prefer medium-length sentences)
     const length = sentence.length;
     if (length >= 50 && length <= 300) {
@@ -358,7 +358,7 @@ const scoreSentence = (sentence: string, query: string): number => {
     } else if (length < 50 || length > 500) {
         score -= 5;
     }
-    
+
     return score;
 };
 
@@ -379,36 +379,36 @@ export const extractRelevantContent = (
     if (!content || content.length === 0) {
         return content;
     }
-    
+
     // If content is already short enough, return as-is
     if (content.length <= maxLength) {
         return content;
     }
-    
+
     // Split into sentences
     const sentences = splitIntoSentences(content);
-    
+
     if (sentences.length === 0) {
         // Fallback: just truncate
         return content.substring(0, maxLength);
     }
-    
+
     // Score each sentence
     const scoredSentences = sentences.map(sentence => ({
         sentence,
         score: scoreSentence(sentence, query),
         originalIndex: sentences.indexOf(sentence),
     }));
-    
+
     // Sort by score (descending), but keep track of original order
     scoredSentences.sort((a, b) => b.score - a.score);
-    
+
     // Take top sentences, but try to maintain some order coherence
     const topSentences = scoredSentences.slice(0, 15); // Top 15 by score
-    
+
     // Sort back by original index to maintain reading flow
     topSentences.sort((a, b) => a.originalIndex - b.originalIndex);
-    
+
     // Build result, adding sentences until we hit maxLength
     let result = '';
     for (const { sentence } of topSentences) {
@@ -424,13 +424,13 @@ export const extractRelevantContent = (
             break;
         }
     }
-    
+
     // If we still have space, add more sentences in order
     if (result.length < maxLength * 0.8 && scoredSentences.length > topSentences.length) {
         const remainingSentences = scoredSentences
             .slice(topSentences.length)
             .sort((a, b) => a.originalIndex - b.originalIndex);
-        
+
         for (const { sentence } of remainingSentences) {
             const candidate = `${result} ${sentence}`;
             if (candidate.length <= maxLength) {
@@ -440,24 +440,27 @@ export const extractRelevantContent = (
             }
         }
     }
-    
+
     return result.trim() || content.substring(0, maxLength);
 };
 
 /**
- * Scrapes multiple URLs in parallel.
+ * Scrapes multiple URLs in parallel using retry logic.
  */
 export const scrapeMultiple = async (urls: string[]): Promise<ScrapedContent[]> => {
     logger.info(`Scraping ${urls.length} URLs in parallel`, CONTEXT);
 
-    const results = await Promise.allSettled(urls.map(scrapePage));
+    const results = await retryMultiple(urls, scrapePage, {
+        maxAttempts: 2,
+        initialDelayMs: 500,
+    });
 
-    return results.map((result, index) => {
-        if (result.status === 'fulfilled') {
-            return result.value;
+    return results.map((res) => {
+        if (res.result) {
+            return res.result;
         }
         return {
-            url: urls[index],
+            url: res.item,
             title: 'Failed to load',
             content: 'Unable to retrieve content from this source.',
             success: false,
