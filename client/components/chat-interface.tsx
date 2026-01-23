@@ -91,9 +91,9 @@ export function ChatInterface({ query, setQuery, onSubmit, isLoading, hasSearche
 
             {!hasSearched && (
                 <div className="text-center mb-10 animate-in fade-in slide-in-from-bottom-8 duration-700">
-                    <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-800/50 border border-slate-700/50 mb-6">
-                        <Sparkles className="w-3 h-3 text-blue-400" />
-                        <span className="text-xs text-slate-400">Powered by AI</span>
+                    <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-black/40 border border-emerald-700/50 mb-6">
+                        <Sparkles className="w-3 h-3 text-emerald-400" />
+                        <span className="text-xs text-emerald-300/80">Powered by AI</span>
                     </div>
                     <h1 className="text-4xl md:text-5xl font-bold tracking-tight mb-4">
                         <span className="bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent">
@@ -110,7 +110,7 @@ export function ChatInterface({ query, setQuery, onSubmit, isLoading, hasSearche
                 <div className="relative">
                     {/* Glow effect */}
                     <div className={cn(
-                        "absolute -inset-1 rounded-2xl bg-gradient-to-r from-blue-500/20 via-purple-500/20 to-blue-500/20 opacity-0 blur-lg transition-opacity duration-500",
+                        "absolute -inset-1 rounded-2xl bg-gradient-to-r from-emerald-500/20 via-green-500/20 to-emerald-500/20 opacity-0 blur-lg transition-opacity duration-500",
                         "group-focus-within:opacity-100"
                     )} />
 
@@ -118,10 +118,10 @@ export function ChatInterface({ query, setQuery, onSubmit, isLoading, hasSearche
                         {/* Main input container */}
                         <div className={cn(
                             "relative transition-all",
-                            "bg-slate-900/80 backdrop-blur-xl",
-                            "border border-slate-700/50 hover:border-slate-600/50",
-                            "focus-within:ring-2 focus-within:ring-blue-500/50 focus-within:ring-offset-0 focus-within:border-blue-500/50",
-                            hasSearched ? "rounded-xl" : "rounded-2xl shadow-2xl shadow-black/20"
+                            "bg-black/50 backdrop-blur-xl",
+                            "border border-emerald-800/40 hover:border-emerald-700/50",
+                            "focus-within:ring-2 focus-within:ring-emerald-500/50 focus-within:ring-offset-0 focus-within:border-emerald-500/50",
+                            hasSearched ? "rounded-xl" : "rounded-2xl shadow-2xl shadow-black/40"
                         )}>
                             {/* Attachments preview */}
                             {attachments.length > 0 && (
@@ -150,8 +150,8 @@ export function ChatInterface({ query, setQuery, onSubmit, isLoading, hasSearche
                             {/* Input row */}
                             <div className="flex items-center">
                                 <Search className={cn(
-                                    "absolute left-5 h-5 w-5 text-slate-500 transition-colors",
-                                    "group-focus-within:text-blue-400"
+                                    "absolute left-5 h-5 w-5 text-slate-400 transition-colors",
+                                    "group-focus-within:text-emerald-400"
                                 )} />
                                 <Input
                                     value={query}
@@ -174,7 +174,7 @@ export function ChatInterface({ query, setQuery, onSubmit, isLoading, hasSearche
                                         type="button"
                                         variant="ghost"
                                         size="sm"
-                                        className="h-8 px-3 rounded-lg bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 hover:text-blue-300"
+                                        className="h-8 px-3 rounded-lg bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 hover:text-emerald-300"
                                     >
                                         <Search className="w-3.5 h-3.5 mr-1.5" />
                                         Search
@@ -259,8 +259,8 @@ export function ChatInterface({ query, setQuery, onSubmit, isLoading, hasSearche
                                         disabled={!query.trim() || isLoading}
                                         className={cn(
                                             "h-8 w-8 rounded-lg ml-1 transition-all",
-                                            "bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-400 hover:to-blue-400",
-                                            "shadow-lg shadow-cyan-500/25",
+                                            "bg-gradient-to-r from-emerald-500 to-green-500 hover:from-emerald-400 hover:to-green-400",
+                                            "shadow-lg shadow-emerald-500/25",
                                             "disabled:opacity-40 disabled:shadow-none"
                                         )}
                                     >
@@ -285,8 +285,8 @@ export function ChatInterface({ query, setQuery, onSubmit, isLoading, hasSearche
                             key={index}
                             type="button"
                             onClick={() => handleSuggestionClick(suggestion)}
-                            className="flex items-center gap-2 px-4 py-2 rounded-full bg-slate-800/50 border border-slate-700/50 
-                                text-sm text-slate-400 hover:text-white hover:bg-slate-700/50 hover:border-slate-600/50
+                            className="flex items-center gap-2 px-4 py-2 rounded-full bg-black/40 border border-emerald-800/40 
+                                text-sm text-emerald-300/80 hover:text-white hover:bg-emerald-900/30 hover:border-emerald-600/50
                                 transition-all duration-200"
                         >
                             <suggestion.icon className="w-4 h-4" />
