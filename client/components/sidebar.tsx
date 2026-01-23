@@ -34,17 +34,17 @@ export function Sidebar({ isOpen, onToggle }: SidebarProps) {
             {/* Collapsed sidebar (icons only) */}
             <aside className={cn(
                 "fixed left-0 top-0 h-full z-50 flex flex-col",
-                "bg-slate-950/80 backdrop-blur-xl border-r border-slate-800/50",
+                "bg-black/40 backdrop-blur-xl border-r border-emerald-900/30",
                 "transition-all duration-300",
                 isOpen ? "w-64" : "w-16"
             )}>
                 {/* Logo */}
                 <div className="p-4 flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-lg shadow-blue-500/20 shrink-0">
+                    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-500 to-green-600 flex items-center justify-center shadow-lg shadow-emerald-500/20 shrink-0">
                         <Sparkles className="w-4 h-4 text-white" />
                     </div>
                     {isOpen && (
-                        <span className="text-lg font-semibold bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent animate-in fade-in duration-300">
+                        <span className="text-lg font-semibold bg-gradient-to-r from-white to-emerald-300 bg-clip-text text-transparent animate-in fade-in duration-300">
                             Atom
                         </span>
                     )}
@@ -102,9 +102,9 @@ export function Sidebar({ isOpen, onToggle }: SidebarProps) {
                 </div>
 
                 {/* Sign in button at bottom */}
-                <div className="p-4 border-t border-slate-800/50">
-                    <button className="w-full flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-blue-500/10 to-purple-500/10 border border-blue-500/20 text-blue-400 hover:border-blue-500/40 transition-all duration-200">
-                        <div className="w-6 h-6 rounded-full bg-slate-700 flex items-center justify-center">
+                <div className="p-4 border-t border-emerald-900/30">
+                    <button className="w-full flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-emerald-500/10 to-green-500/10 border border-emerald-500/20 text-emerald-400 hover:border-emerald-500/40 transition-all duration-200">
+                        <div className="w-6 h-6 rounded-full bg-emerald-900/50 flex items-center justify-center">
                             <span className="text-xs">?</span>
                         </div>
                         {isOpen && <span className="text-sm font-medium">Sign In</span>}

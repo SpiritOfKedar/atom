@@ -101,15 +101,23 @@ export default function Home() {
   }, [answer, isLoading]);
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950">
+    <div className="min-h-screen relative">
+      {/* Background Image */}
+      <div
+        className="fixed inset-0 bg-cover bg-center bg-no-repeat"
+        style={{ backgroundImage: "url('/back_for_proj.jpg')" }}
+      />
+      {/* Dark overlay for readability */}
+      <div className="fixed inset-0 bg-black/60 backdrop-blur-[2px]" />
+
       {/* Sidebar */}
       <Sidebar isOpen={sidebarOpen} onToggle={() => setSidebarOpen(!sidebarOpen)} />
 
-      {/* Ambient background effects */}
+      {/* Ambient background effects - forest inspired */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-0 left-1/4 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl" />
-        <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl" />
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-cyan-500/5 rounded-full blur-3xl" />
+        <div className="absolute top-0 left-1/4 w-96 h-96 bg-emerald-500/10 rounded-full blur-3xl" />
+        <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-green-500/10 rounded-full blur-3xl" />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-lime-500/5 rounded-full blur-3xl" />
       </div>
 
       {/* Main content with sidebar offset */}
@@ -146,7 +154,7 @@ export default function Home() {
                 </div>
               ) : null}
 
-              <Separator className="bg-slate-800/50" />
+              <Separator className="bg-emerald-900/30" />
 
               {/* Answer Section */}
               <div className="relative">
@@ -154,9 +162,9 @@ export default function Home() {
                   <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
                     <div className="h-5 w-5 flex items-center justify-center">
                       {isLoading ? (
-                        <RefreshCw className="h-4 w-4 animate-spin text-blue-400" />
+                        <RefreshCw className="h-4 w-4 animate-spin text-emerald-400" />
                       ) : (
-                        <div className="h-2 w-2 bg-gradient-to-r from-blue-400 to-purple-400 rounded-full shadow-lg shadow-blue-500/50" />
+                        <div className="h-2 w-2 bg-gradient-to-r from-emerald-400 to-green-400 rounded-full shadow-lg shadow-emerald-500/50" />
                       )}
                     </div>
                     <span className="text-slate-300">Answer</span>
@@ -180,16 +188,16 @@ export default function Home() {
                 </div>
 
                 {answer ? (
-                  <div className="relative p-5 rounded-xl bg-slate-900/50 border border-slate-800/50 backdrop-blur-sm">
-                    <div className="prose prose-invert max-w-none text-base leading-relaxed break-words text-slate-300">
+                  <div className="relative p-5 rounded-xl bg-black/40 border border-emerald-900/30 backdrop-blur-sm">
+                    <div className="prose prose-invert max-w-none text-base leading-relaxed break-words text-emerald-100/90">
                       <div className="whitespace-pre-wrap">{answer}</div>
                     </div>
                   </div>
                 ) : (
-                  <div className="space-y-4 p-5 rounded-xl bg-slate-900/50 border border-slate-800/50">
-                    <Skeleton className="h-4 w-full bg-slate-800" />
-                    <Skeleton className="h-4 w-[90%] bg-slate-800" />
-                    <Skeleton className="h-4 w-[80%] bg-slate-800" />
+                  <div className="space-y-4 p-5 rounded-xl bg-black/40 border border-emerald-900/30">
+                    <Skeleton className="h-4 w-full bg-emerald-900/30" />
+                    <Skeleton className="h-4 w-[90%] bg-emerald-900/30" />
+                    <Skeleton className="h-4 w-[80%] bg-emerald-900/30" />
                   </div>
                 )}
               </div>
