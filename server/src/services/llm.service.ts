@@ -11,6 +11,62 @@ const openai = new OpenAI({
     apiKey: env.openaiApiKey,
 });
 
+/**
+ * Generates a standalone, search-friendly query from a conversational follow-up.
+ * Takes into account the previous conversation history.
+ */
+export const generateStandaloneQuery = async (
+    query: string,
+    conversationHistory: IMessage[]
+): Promise<string> => {
+    if (!conversationHistory || conversationHistory.length === 0) {
+        return query;
+    }
+
+    logger.info(`Generating standalone query for: "${query.substring(0, 50)}..."`, CONTEXT);
+
+    try {
+        const historyText = conversationHistory
+            .map((msg) => `${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.content}`)
+            .join('\n');
+
+        const prompt = `Given the following conversation history and a follow-up question, rephrase the follow-up question into a standalone, search-engine-friendly query. 
+
+CONVERSATION HISTORY:
+${historyText}
+
+FOLLOW-UP QUESTION:
+${query}
+
+REPHRASED QUERY:
+(Provide only the final search query, no explanation or conversational fillers)`;
+
+        const response = await openai.chat.completions.create({
+            model: 'gpt-4o-mini',
+            messages: [
+                {
+                    role: 'system',
+                    content: 'You are an expert at turning conversational follow-up questions into standalone search queries. Return only the query string.',
+                },
+                {
+                    role: 'user',
+                    content: prompt,
+                },
+            ],
+            temperature: 0.1,
+            max_tokens: 50,
+        });
+
+        const standaloneQuery = response.choices[0]?.message?.content?.trim() || query;
+        logger.info(`Standalone query generated: "${standaloneQuery}"`, CONTEXT);
+        return standaloneQuery;
+
+    } catch (error: any) {
+        logger.error(`Failed to generate standalone query: ${error.message}`, CONTEXT);
+        return query; // Fallback to original
+    }
+};
+
 const SYSTEM_PROMPT = `You are a helpful AI research assistant that provides accurate, well-sourced answers based on the provided context.
 
 Instructions:
@@ -37,11 +93,11 @@ const buildPrompt = (
     const historySection =
         conversationHistory && conversationHistory.length > 0
             ? `Previous conversation:\n${conversationHistory
-                    .map((msg) => {
-                        const speaker = msg.role === 'user' ? 'User' : 'Assistant';
-                        return `${speaker}: ${msg.content}`;
-                    })
-                    .join('\n')}\n\n`
+                .map((msg) => {
+                    const speaker = msg.role === 'user' ? 'User' : 'Assistant';
+                    return `${speaker}: ${msg.content}`;
+                })
+                .join('\n')}\n\n`
             : '';
 
     const introLine =
@@ -205,13 +261,13 @@ Example format: {"questions": ["Question 1?", "Question 2?", "Question 3?"]}`;
         });
 
         const responseText = response.choices[0]?.message?.content || '{}';
-        
+
         try {
             const parsed = JSON.parse(responseText);
-            
+
             // Handle different possible response formats
             let questions: string[] = [];
-            
+
             if (Array.isArray(parsed)) {
                 questions = parsed;
             } else if (parsed.questions && Array.isArray(parsed.questions)) {
@@ -225,13 +281,13 @@ Example format: {"questions": ["Question 1?", "Question 2?", "Question 3?"]}`;
                     questions = parsed[arrayKeys[0]];
                 }
             }
-            
+
             // Filter and validate questions
             questions = questions
                 .filter((q: any) => typeof q === 'string' && q.trim().length > 10)
                 .map((q: string) => q.trim())
                 .slice(0, 4); // Max 4 questions
-            
+
             if (questions.length === 0) {
                 logger.warn('No valid follow-up questions generated, using defaults', CONTEXT);
                 // Fallback to generic questions
@@ -241,13 +297,13 @@ Example format: {"questions": ["Question 1?", "Question 2?", "Question 3?"]}`;
                     `Are there any recent developments related to ${query}?`,
                 ];
             }
-            
+
             logger.info(`Generated ${questions.length} follow-up questions`, CONTEXT);
             return questions;
-            
+
         } catch (parseError: any) {
             logger.warn(`Failed to parse follow-up questions JSON: ${parseError.message}`, CONTEXT);
-            
+
             // Fallback: try to extract questions from plain text
             const text = responseText.trim();
             if (text.startsWith('[') && text.endsWith(']')) {
@@ -260,7 +316,7 @@ Example format: {"questions": ["Question 1?", "Question 2?", "Question 3?"]}`;
                     // Ignore
                 }
             }
-            
+
             // Final fallback
             return [
                 `Tell me more about ${query}`,
@@ -268,10 +324,10 @@ Example format: {"questions": ["Question 1?", "Question 2?", "Question 3?"]}`;
                 `Can you provide more details about ${query}?`,
             ];
         }
-        
+
     } catch (error: any) {
         logger.error(`Follow-up question generation failed: ${error.message}`, CONTEXT, error);
-        
+
         // Return generic fallback questions
         return [
             `Tell me more about ${query}`,

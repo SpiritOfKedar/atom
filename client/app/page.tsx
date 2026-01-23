@@ -23,8 +23,6 @@ export default function Home() {
   const [query, setQuery] = useState('');
   const [hasSearched, setHasSearched] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [sources, setSources] = useState<Source[]>([]);
-  const [answer, setAnswer] = useState('');
   const [copied, setCopied] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [conversationId, setConversationId] = useState<string | null>(null);
@@ -36,10 +34,24 @@ export default function Home() {
     e.preventDefault();
     if (!query.trim()) return;
 
+    const userQuery = query.trim();
+    setQuery(''); // Clear input immediately
     setHasSearched(true);
     setIsLoading(true);
-    setSources([]);
-    setAnswer('');
+
+    // Add user message to history
+    const newUserMessage: Message = {
+      role: 'user',
+      content: userQuery,
+      createdAt: new Date().toISOString()
+    };
+
+    setMessages(prev => [...prev, newUserMessage]);
+
+    // Create a placeholder for the assistant response
+    const assistantMessageId = Math.random().toString(36).substring(7);
+    let currentAssistantContent = '';
+    let currentSources: Source[] = [];
 
     try {
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -54,7 +66,7 @@ export default function Home() {
       const response = await fetch('http://localhost:3001/api/chat', {
         method: 'POST',
         headers,
-        body: JSON.stringify({ query, conversationId }),
+        body: JSON.stringify({ query: userQuery, conversationId }),
       });
 
       if (!response.ok) throw new Error('Network response was not ok');
@@ -82,14 +94,55 @@ export default function Home() {
             const parsed = JSON.parse(line);
 
             if (parsed.type === 'sources') {
-              setSources(parsed.data);
+              currentSources = parsed.data;
+              setMessages(prev => {
+                const last = prev[prev.length - 1];
+                if (last && last.role === 'assistant') {
+                  return [
+                    ...prev.slice(0, -1),
+                    { ...last, sources: parsed.data }
+                  ];
+                } else {
+                  return [
+                    ...prev,
+                    {
+                      role: 'assistant',
+                      content: '',
+                      sources: parsed.data,
+                      createdAt: new Date().toISOString()
+                    }
+                  ];
+                }
+              });
             } else if (parsed.type === 'token') {
-              setAnswer(prev => prev + parsed.data);
+              currentAssistantContent += parsed.data;
+              setMessages(prev => {
+                const last = prev[prev.length - 1];
+                if (last && last.role === 'assistant') {
+                  return [
+                    ...prev.slice(0, -1),
+                    { ...last, content: currentAssistantContent }
+                  ];
+                } else {
+                  return [
+                    ...prev,
+                    {
+                      role: 'assistant',
+                      content: currentAssistantContent,
+                      sources: currentSources,
+                      createdAt: new Date().toISOString()
+                    }
+                  ];
+                }
+              });
             } else if (parsed.type === 'conversationId') {
               setConversationId(parsed.data);
             } else if (parsed.type === 'error') {
               console.error("Backend error:", parsed.data);
-              setAnswer(prev => prev + "\n[Error: " + parsed.data + "]");
+              setMessages(prev => [
+                ...prev,
+                { role: 'assistant', content: `Error: ${parsed.data}`, createdAt: new Date().toISOString() }
+              ]);
             }
           } catch (err) {
             console.error('Error parsing JSON line:', err);
@@ -98,14 +151,17 @@ export default function Home() {
       }
     } catch (error) {
       console.error('Fetch error:', error);
-      setAnswer("Sorry, I encountered an error while searching.");
+      setMessages(prev => [
+        ...prev,
+        { role: 'assistant', content: "Sorry, I encountered an error while searching.", createdAt: new Date().toISOString() }
+      ]);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleCopy = async () => {
-    await navigator.clipboard.writeText(answer);
+  const handleCopy = async (content: string) => {
+    await navigator.clipboard.writeText(content);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -121,17 +177,6 @@ export default function Home() {
       setConversationId(id);
       setMessages(convo.messages);
       setHasSearched(true);
-
-      const lastUserMsg = [...convo.messages].reverse().find(m => m.role === 'user');
-      const lastAssistantMsg = [...convo.messages].reverse().find(m => m.role === 'assistant');
-
-      if (lastUserMsg) setQuery(lastUserMsg.content);
-      if (lastAssistantMsg) {
-        setAnswer(lastAssistantMsg.content);
-        if (lastAssistantMsg.sources) {
-          setSources(lastAssistantMsg.sources);
-        }
-      }
     } catch (error) {
       console.error('Failed to load conversation:', error);
     }
@@ -140,17 +185,15 @@ export default function Home() {
   const handleNewConversation = () => {
     setConversationId(null);
     setQuery('');
-    setAnswer('');
-    setSources([]);
     setMessages([]);
     setHasSearched(false);
   };
 
   useEffect(() => {
-    if (isLoading) {
+    if (isLoading || messages.length > 0) {
       bottomRef.current?.scrollIntoView({ behavior: "smooth" });
     }
-  }, [answer, isLoading]);
+  }, [messages, isLoading]);
 
   return (
     <div className="min-h-screen relative">
@@ -188,71 +231,74 @@ export default function Home() {
           />
 
           {hasSearched && (
-            <div className="max-w-2xl mx-auto w-full mt-8 space-y-6 animate-in fade-in slide-in-from-bottom-8 duration-700">
-
-              {sources.length > 0 ? (
-                <SourceCarousel sources={sources} />
-              ) : isLoading ? (
-                <div className="w-full space-y-2 mb-6">
-                  <div className="flex items-center gap-2 mb-3 text-sm font-medium text-muted-foreground">
-                    <Skeleton className="h-4 w-4 rounded-full bg-slate-800" />
-                    <Skeleton className="h-4 w-20 bg-slate-800" />
-                  </div>
-                  <div className="flex gap-3 overflow-hidden">
-                    {[1, 2, 3].map(i => (
-                      <Skeleton key={i} className="w-[220px] h-[90px] rounded-xl shrink-0 bg-slate-800/50" />
-                    ))}
-                  </div>
-                </div>
-              ) : null}
-
-              <Separator className="bg-emerald-900/30" />
-
-              <div className="relative">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                    <div className="h-5 w-5 flex items-center justify-center">
-                      {isLoading ? (
-                        <RefreshCw className="h-4 w-4 animate-spin text-emerald-400" />
-                      ) : (
-                        <div className="h-2 w-2 bg-gradient-to-r from-emerald-400 to-green-400 rounded-full shadow-lg shadow-emerald-500/50" />
-                      )}
+            <div className="max-w-2xl mx-auto w-full mt-8 space-y-12 animate-in fade-in slide-in-from-bottom-8 duration-700">
+              {messages.map((message, idx) => (
+                <div key={idx} className="space-y-6">
+                  {message.role === 'user' ? (
+                    <div className="flex flex-col gap-2">
+                      <h2 className="text-2xl font-bold tracking-tight text-white px-2 border-l-4 border-emerald-500">
+                        {message.content}
+                      </h2>
                     </div>
-                    <span className="text-slate-300">Answer</span>
-                  </div>
-
-                  {answer && !isLoading && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={handleCopy}
-                      className="h-8 px-2 text-slate-400 hover:text-white hover:bg-slate-800"
-                    >
-                      {copied ? (
-                        <Check className="h-4 w-4 text-green-400" />
-                      ) : (
-                        <Copy className="h-4 w-4" />
+                  ) : (
+                    <div className="space-y-6">
+                      {message.sources && message.sources.length > 0 && (
+                        <SourceCarousel sources={message.sources} />
                       )}
-                      <span className="ml-1 text-xs">{copied ? 'Copied!' : 'Copy'}</span>
-                    </Button>
+
+                      <div className="relative">
+                        <div className="flex items-center justify-between mb-4">
+                          <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                            <div className="h-5 w-5 flex items-center justify-center">
+                              {isLoading && idx === messages.length - 1 ? (
+                                <RefreshCw className="h-4 w-4 animate-spin text-emerald-400" />
+                              ) : (
+                                <div className="h-2 w-2 bg-gradient-to-r from-emerald-400 to-green-400 rounded-full shadow-lg shadow-emerald-500/50" />
+                              )}
+                            </div>
+                            <span className="text-slate-300">Answer</span>
+                          </div>
+
+                          {message.content && !(isLoading && idx === messages.length - 1) && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={async () => {
+                                await navigator.clipboard.writeText(message.content);
+                                setCopied(true);
+                                setTimeout(() => setCopied(false), 2000);
+                              }}
+                              className="h-8 px-2 text-slate-400 hover:text-white hover:bg-slate-800"
+                            >
+                              {copied ? (
+                                <Check className="h-4 w-4 text-green-400" />
+                              ) : (
+                                <Copy className="h-4 w-4" />
+                              )}
+                              <span className="ml-1 text-xs">{copied ? 'Copied!' : 'Copy'}</span>
+                            </Button>
+                          )}
+                        </div>
+
+                        {message.content ? (
+                          <div className="relative p-5 rounded-xl bg-black/40 border border-emerald-900/30 backdrop-blur-sm">
+                            <div className="prose prose-invert max-w-none text-base leading-relaxed break-words text-emerald-100/90">
+                              <div className="whitespace-pre-wrap">{message.content}</div>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="space-y-4 p-5 rounded-xl bg-black/40 border border-emerald-900/30">
+                            <Skeleton className="h-4 w-full bg-emerald-900/30" />
+                            <Skeleton className="h-4 w-[90%] bg-emerald-900/30" />
+                            <Skeleton className="h-4 w-[80%] bg-emerald-900/30" />
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   )}
+                  {idx < messages.length - 1 && <Separator className="bg-emerald-900/10" />}
                 </div>
-
-                {answer ? (
-                  <div className="relative p-5 rounded-xl bg-black/40 border border-emerald-900/30 backdrop-blur-sm">
-                    <div className="prose prose-invert max-w-none text-base leading-relaxed break-words text-emerald-100/90">
-                      <div className="whitespace-pre-wrap">{answer}</div>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="space-y-4 p-5 rounded-xl bg-black/40 border border-emerald-900/30">
-                    <Skeleton className="h-4 w-full bg-emerald-900/30" />
-                    <Skeleton className="h-4 w-[90%] bg-emerald-900/30" />
-                    <Skeleton className="h-4 w-[80%] bg-emerald-900/30" />
-                  </div>
-                )}
-              </div>
-
+              ))}
               <div ref={bottomRef} className="h-4" />
             </div>
           )}

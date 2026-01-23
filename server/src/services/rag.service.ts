@@ -1,7 +1,7 @@
 import { Response } from 'express';
 import { searchWeb } from './search.service';
 import { scrapeMultiple, extractRelevantContent } from './scrape.service';
-import { streamCompletion } from './llm.service';
+import { streamCompletion, generateStandaloneQuery } from './llm.service';
 import { AnswerStyle, RAGContext, SearchResult, SearchType } from '../types';
 import { logger } from '../utils/logger';
 import { IMessage } from '../models/conversation.model';
@@ -18,24 +18,6 @@ interface RAGPipelineResult {
 }
 
 /**
- * Builds an enhanced query string that incorporates recent conversation history.
- */
-const buildEnhancedQuery = (query: string, conversationHistory?: IMessage[]): string => {
-    if (!conversationHistory || conversationHistory.length === 0) {
-        return query;
-    }
-
-    const historyLines = conversationHistory.map((msg) => {
-        const speaker = msg.role === 'user' ? 'User' : 'Assistant';
-        return `${speaker}: ${msg.content}`;
-    });
-
-    const historyText = historyLines.join('\n');
-
-    return `Previous conversation:\n${historyText}\n\nCurrent question: ${query}`;
-};
-
-/**
  * Sends a status update to the client via SSE.
  */
 const sendStatus = (res: Response, status: string): void => {
@@ -48,17 +30,17 @@ const sendStatus = (res: Response, status: string): void => {
 const deduplicateSources = (sources: RankedSource[]): RankedSource[] => {
     const seenDomains = new Set<string>();
     const deduplicated: RankedSource[] = [];
-    
+
     for (const source of sources) {
         try {
             const urlObj = new URL(source.link);
             const domain = urlObj.hostname.toLowerCase();
-            
+
             // Remove www. prefix for comparison
-            const normalizedDomain = domain.startsWith('www.') 
-                ? domain.substring(4) 
+            const normalizedDomain = domain.startsWith('www.')
+                ? domain.substring(4)
                 : domain;
-            
+
             if (!seenDomains.has(normalizedDomain)) {
                 seenDomains.add(normalizedDomain);
                 deduplicated.push(source);
@@ -70,14 +52,14 @@ const deduplicateSources = (sources: RankedSource[]): RankedSource[] => {
             deduplicated.push(source);
         }
     }
-    
+
     if (deduplicated.length < sources.length) {
         logger.info(
             `Deduplicated ${sources.length} sources to ${deduplicated.length} unique domains`,
             CONTEXT
         );
     }
-    
+
     return deduplicated;
 };
 
@@ -104,9 +86,18 @@ export const runRAGPipeline = async (
         logger.info(`Using ${effectiveSearchType} search strategy`, CONTEXT);
     }
 
-    // Step 1: Build enhanced query with conversation history (if any)
-    let effectiveQuery = buildEnhancedQuery(query, conversationHistory);
-    
+    // Step 1: Handle conversation history to get a standalone search query
+    let effectiveQuery = query;
+    if (conversationHistory && conversationHistory.length > 0) {
+        sendStatus(res, 'Analyzing follow-up question...');
+        try {
+            effectiveQuery = await generateStandaloneQuery(query, conversationHistory);
+        } catch (error: any) {
+            logger.warn(`Standalone query generation failed: ${error.message}`, CONTEXT);
+            // Continue with original query
+        }
+    }
+
     // Step 2: Optimize the query using LLM
     sendStatus(res, 'Optimizing query...');
     try {
@@ -123,12 +114,12 @@ export const runRAGPipeline = async (
         // Continue with unoptimized query
     }
 
-    const searchStatusMessage = effectiveSearchType === 'news' 
-        ? 'Searching news...' 
+    const searchStatusMessage = effectiveSearchType === 'news'
+        ? 'Searching news...'
         : effectiveSearchType === 'academic'
-        ? 'Searching academic sources...'
-        : 'Searching the web...';
-    
+            ? 'Searching academic sources...'
+            : 'Searching the web...';
+
     sendStatus(res, searchStatusMessage);
     const searchResults = await searchWeb(effectiveQuery, 5, effectiveSearchType);
 
@@ -167,13 +158,13 @@ export const runRAGPipeline = async (
         .map((rs, index) => {
             const scraped = scrapedContents.find(sc => sc.url === rs.link);
             const rawContent = scraped?.content || rs.snippet;
-            
+
             // Top 2 sources get more content (2500 chars), others get less (1000-1500)
             const maxLength = index < 2 ? 2500 : index < 3 ? 1500 : 1000;
-            
+
             // Extract most relevant content based on query
             const optimizedContent = extractRelevantContent(rawContent, query, maxLength);
-            
+
             return {
                 index: index + 1,
                 title: scraped?.title || rs.title || 'Unknown',
@@ -208,10 +199,10 @@ export const runRAGPipeline = async (
             readingTime: scraped?.readingTime,
         };
     });
-    
+
     // Re-send sources in ranked order
     res.write(JSON.stringify({ type: 'sources', data: rankedSourcesPayload }) + '\n');
-    
+
     if (onSources) {
         onSources(rankedSourcesPayload);
     }
