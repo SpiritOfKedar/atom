@@ -1,17 +1,22 @@
 import { Request, Response } from 'express';
 import { runRAGPipeline } from '../services/rag.service';
-import { ChatRequest } from '../types';
+import { ExtendedChatRequest } from '../types';
 import { logger } from '../utils/logger';
 import { ApiError } from '../utils/apiError';
 import { AuthenticatedRequest, optionalAuth } from '../middleware/auth.middleware';
 import * as conversationService from '../services/conversation.service';
 import { IMessage } from '../models/conversation.model';
+import { validateAnswer } from '../services/answer-validation.service';
+import { generateFollowUpQuestions } from '../services/llm.service';
 
 const CONTEXT = 'ChatController';
 
-interface ExtendedChatRequest extends ChatRequest {
-    conversationId?: string;
-}
+/**
+ * Sends a status update to the client via SSE.
+ */
+const sendStatus = (res: Response, status: string): void => {
+    res.write(JSON.stringify({ type: 'status', data: status }) + '\n');
+};
 
 /**
  * Handles POST /api/chat
@@ -20,7 +25,7 @@ interface ExtendedChatRequest extends ChatRequest {
  */
 export const handleChat = async (req: Request, res: Response): Promise<void> => {
     const authReq = req as AuthenticatedRequest;
-    const { query, conversationId } = req.body as ExtendedChatRequest;
+    const { query, conversationId, searchType, answerStyle } = req.body as ExtendedChatRequest;
 
     if (!query || typeof query !== 'string' || query.trim().length === 0) {
         res.status(400).json({ error: 'Query is required and must be a non-empty string' });
@@ -63,11 +68,70 @@ export const handleChat = async (req: Request, res: Response): Promise<void> => 
             }
         }
 
-        const result = await runRAGPipeline(sanitizedQuery, res, (token: string) => {
-            fullAnswer += token;
-        }, (sourcesData: any[]) => {
-            sources = sourcesData;
-        }, conversationHistory);
+        const result = await runRAGPipeline(
+            sanitizedQuery,
+            res,
+            (token: string) => {
+                fullAnswer += token;
+            },
+            (sourcesData: any[]) => {
+                sources = sourcesData;
+            },
+            conversationHistory,
+            searchType,
+            answerStyle
+        );
+
+        // Validate answer quality after streaming completes
+        if (fullAnswer && result.ragContexts && result.ragContexts.length > 0) {
+            try {
+                sendStatus(res, 'Validating answer...');
+                const validation = await validateAnswer(fullAnswer, result.ragContexts, sanitizedQuery);
+                
+                // Send validation result to client
+                res.write(JSON.stringify({
+                    type: 'validation',
+                    data: {
+                        isValid: validation.isValid,
+                        confidence: validation.confidence,
+                        issues: validation.issues,
+                        summary: validation.summary,
+                    }
+                }) + '\n');
+                
+                logger.info(
+                    `Answer validation: isValid=${validation.isValid}, ` +
+                    `confidence=${validation.confidence.toFixed(2)}`,
+                    CONTEXT
+                );
+            } catch (validationError: any) {
+                logger.warn(`Answer validation failed: ${validationError.message}`, CONTEXT);
+                // Continue without validation
+            }
+        }
+
+        // Generate follow-up questions
+        if (fullAnswer && result.ragContexts && result.ragContexts.length > 0) {
+            try {
+                sendStatus(res, 'Generating follow-up questions...');
+                const followUpQuestions = await generateFollowUpQuestions(
+                    sanitizedQuery,
+                    fullAnswer,
+                    result.ragContexts
+                );
+                
+                // Send follow-up questions to client
+                res.write(JSON.stringify({
+                    type: 'followUps',
+                    data: followUpQuestions
+                }) + '\n');
+                
+                logger.info(`Generated ${followUpQuestions.length} follow-up questions`, CONTEXT);
+            } catch (followUpError: any) {
+                logger.warn(`Follow-up question generation failed: ${followUpError.message}`, CONTEXT);
+                // Continue without follow-up questions
+            }
+        }
 
         if (authReq.userId) {
             try {

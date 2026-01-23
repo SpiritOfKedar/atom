@@ -1,7 +1,9 @@
 import OpenAI from 'openai';
+import crypto from 'crypto';
 import { env } from '../config/env';
 import { logger } from '../utils/logger';
-import crypto from 'crypto';
+import { getCachedOptimizedQuery, cacheOptimizedQuery } from './cache.service';
+import { SearchType } from '../types';
 
 const CONTEXT = 'QueryOptimizationService';
 
@@ -63,14 +65,21 @@ export const optimizeQuery = async (query: string): Promise<string> => {
 
     const trimmedQuery = query.trim();
     
-    // Check cache first
+    // Check Redis/memory cache first
+    const cachedOptimized = await getCachedOptimizedQuery(trimmedQuery);
+    if (cachedOptimized) {
+        logger.debug(`Cache hit (service) for query: "${trimmedQuery.substring(0, 50)}..."`, CONTEXT);
+        return cachedOptimized;
+    }
+    
+    // Check in-memory cache (legacy, for backward compatibility)
     const cacheKey = hashQuery(trimmedQuery);
     const cached = queryCache.get(cacheKey);
     
     if (cached) {
         const age = Date.now() - cached.timestamp;
         if (age < CACHE_TTL_MS) {
-            logger.debug(`Cache hit for query: "${trimmedQuery.substring(0, 50)}..."`, CONTEXT);
+            logger.debug(`Cache hit (memory) for query: "${trimmedQuery.substring(0, 50)}..."`, CONTEXT);
             return cached.optimizedQuery;
         } else {
             // Expired, remove from cache
@@ -133,7 +142,8 @@ Improved query:`;
             return trimmedQuery;
         }
 
-        // Cache the result
+        // Cache the result in both Redis/memory cache and in-memory cache
+        await cacheOptimizedQuery(trimmedQuery, optimizedQuery);
         queryCache.set(cacheKey, {
             optimizedQuery,
             timestamp: Date.now(),
@@ -158,6 +168,39 @@ Improved query:`;
  */
 export const optimizeQueries = async (queries: string[]): Promise<string[]> => {
     return Promise.all(queries.map(optimizeQuery));
+};
+
+/**
+ * Suggests an appropriate search type based on the query.
+ * Uses simple heuristics to determine if query is news-related, academic, or general web.
+ */
+export const suggestSearchType = (query: string): SearchType => {
+    const queryLower = query.toLowerCase();
+    
+    // News-related keywords
+    const newsKeywords = [
+        'news', 'latest', 'recent', 'breaking', 'update', 'announcement',
+        'today', 'yesterday', 'this week', 'this month', '2024', '2025',
+        'happened', 'occurred', 'reported', 'published'
+    ];
+    
+    // Academic/research keywords
+    const academicKeywords = [
+        'research', 'study', 'paper', 'thesis', 'dissertation', 'analysis',
+        'academic', 'scholar', 'university', 'journal', 'publication',
+        'methodology', 'findings', 'hypothesis', 'theory', 'experiment'
+    ];
+    
+    const hasNewsKeywords = newsKeywords.some(keyword => queryLower.includes(keyword));
+    const hasAcademicKeywords = academicKeywords.some(keyword => queryLower.includes(keyword));
+    
+    if (hasNewsKeywords && !hasAcademicKeywords) {
+        return 'news';
+    } else if (hasAcademicKeywords) {
+        return 'academic';
+    }
+    
+    return 'web'; // Default
 };
 
 /**

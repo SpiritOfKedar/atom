@@ -9,6 +9,7 @@ interface EnvConfig {
     openaiApiKey: string;
     serperApiKey: string | undefined;
     corsOrigin: string;
+    redisUrl: string | undefined;
 }
 
 const getEnvVar = (key: string, fallback?: string): string => {
@@ -25,6 +26,7 @@ export const env: EnvConfig = {
     openaiApiKey: getEnvVar('OPENAI_API_KEY', 'sk-placeholder'),
     serperApiKey: process.env.SERPER_API_KEY,
     corsOrigin: process.env.CORS_ORIGIN || 'http://localhost:3000',
+    redisUrl: process.env.REDIS_URL,
 };
 
 export const isDev = env.nodeEnv === 'development';

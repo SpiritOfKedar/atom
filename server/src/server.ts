@@ -2,10 +2,12 @@ import app from './app';
 import { env } from './config/env';
 import { connectDB } from './config/db';
 import { logger } from './utils/logger';
+import { initRedis } from './config/redis';
 
 const startServer = async (): Promise<void> => {
     try {
         await connectDB();
+        await initRedis();
 
         app.listen(env.port, () => {
             logger.info(`🚀 Server running on http://localhost:${env.port}`, 'Server');

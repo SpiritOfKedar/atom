@@ -1,18 +1,19 @@
 import { Response } from 'express';
 import { searchWeb } from './search.service';
-import { scrapeMultiple } from './scrape.service';
+import { scrapeMultiple, extractRelevantContent } from './scrape.service';
 import { streamCompletion } from './llm.service';
-import { RAGContext, SearchResult } from '../types';
+import { AnswerStyle, RAGContext, SearchResult, SearchType } from '../types';
 import { logger } from '../utils/logger';
 import { IMessage } from '../models/conversation.model';
 import { rankSources } from './source-ranking.service';
-import { optimizeQuery } from './query-optimization.service';
+import { optimizeQuery, suggestSearchType } from './query-optimization.service';
 import { RankedSource } from '../types';
 
 const CONTEXT = 'RAGService';
 
 interface RAGPipelineResult {
     sources: SearchResult[];
+    ragContexts: RAGContext[];
     success: boolean;
 }
 
@@ -91,9 +92,17 @@ export const runRAGPipeline = async (
     res: Response,
     onToken?: (token: string) => void,
     onSources?: (sources: any[]) => void,
-    conversationHistory?: IMessage[]
+    conversationHistory?: IMessage[],
+    searchType?: SearchType,
+    answerStyle: AnswerStyle = 'detailed'
 ): Promise<RAGPipelineResult> => {
     logger.info(`Starting RAG pipeline for: "${query}"`, CONTEXT);
+
+    // Determine search type if not provided
+    const effectiveSearchType = searchType || suggestSearchType(query);
+    if (effectiveSearchType !== 'web') {
+        logger.info(`Using ${effectiveSearchType} search strategy`, CONTEXT);
+    }
 
     // Step 1: Build enhanced query with conversation history (if any)
     let effectiveQuery = buildEnhancedQuery(query, conversationHistory);
@@ -114,8 +123,14 @@ export const runRAGPipeline = async (
         // Continue with unoptimized query
     }
 
-    sendStatus(res, 'Searching the web...');
-    const searchResults = await searchWeb(effectiveQuery, 5);
+    const searchStatusMessage = effectiveSearchType === 'news' 
+        ? 'Searching news...' 
+        : effectiveSearchType === 'academic'
+        ? 'Searching academic sources...'
+        : 'Searching the web...';
+    
+    sendStatus(res, searchStatusMessage);
+    const searchResults = await searchWeb(effectiveQuery, 5, effectiveSearchType);
 
     if (searchResults.length === 0) {
         throw new Error('No search results found');
@@ -142,6 +157,7 @@ export const runRAGPipeline = async (
     rankedSources = deduplicateSources(rankedSources);
 
     // Build RAG contexts from ranked sources (highest score first)
+    // Use intelligent content extraction with different max lengths based on rank
     const ragContexts: RAGContext[] = rankedSources
         .filter((rs) => {
             const scraped = scrapedContents.find(sc => sc.url === rs.link);
@@ -150,11 +166,19 @@ export const runRAGPipeline = async (
         })
         .map((rs, index) => {
             const scraped = scrapedContents.find(sc => sc.url === rs.link);
+            const rawContent = scraped?.content || rs.snippet;
+            
+            // Top 2 sources get more content (2500 chars), others get less (1000-1500)
+            const maxLength = index < 2 ? 2500 : index < 3 ? 1500 : 1000;
+            
+            // Extract most relevant content based on query
+            const optimizedContent = extractRelevantContent(rawContent, query, maxLength);
+            
             return {
                 index: index + 1,
                 title: scraped?.title || rs.title || 'Unknown',
                 url: rs.link,
-                content: scraped?.content || rs.snippet,
+                content: optimizedContent,
             };
         });
 
@@ -170,13 +194,20 @@ export const runRAGPipeline = async (
         });
     }
 
-    // Update sources payload with ranked order
-    const rankedSourcesPayload = rankedSources.map((rs) => ({
-        title: rs.title,
-        link: rs.link,
-        favicon: rs.favicon,
-        score: rs.totalScore, // Include score for debugging/UI
-    }));
+    // Update sources payload with ranked order and enhanced metadata
+    const rankedSourcesPayload = rankedSources.map((rs) => {
+        const scraped = scrapedContents.find(sc => sc.url === rs.link);
+        return {
+            title: rs.title,
+            link: rs.link,
+            favicon: rs.favicon,
+            score: rs.totalScore, // Include score for debugging/UI
+            publishedDate: scraped?.publishedDate?.toISOString(),
+            author: scraped?.author,
+            category: scraped?.category,
+            readingTime: scraped?.readingTime,
+        };
+    });
     
     // Re-send sources in ranked order
     res.write(JSON.stringify({ type: 'sources', data: rankedSourcesPayload }) + '\n');
@@ -188,10 +219,11 @@ export const runRAGPipeline = async (
     logger.info(`Built ${ragContexts.length} RAG contexts`, CONTEXT);
 
     sendStatus(res, 'Generating answer...');
-    await streamCompletion(query, ragContexts, res, onToken, conversationHistory);
+    await streamCompletion(query, ragContexts, res, onToken, conversationHistory, answerStyle);
 
     return {
         sources: rankedSources,
+        ragContexts,
         success: true,
     };
 };

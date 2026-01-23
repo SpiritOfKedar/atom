@@ -1,7 +1,9 @@
 import axios from 'axios';
-import { SearchResult } from '../types';
+import { SearchResult, SearchType } from '../types';
 import { env } from '../config/env';
 import { logger } from '../utils/logger';
+import { getCachedSearchResults, cacheSearchResults } from './cache.service';
+import { retry } from '../utils/retry';
 
 const SERPER_API_URL = 'https://google.serper.dev/search';
 const CONTEXT = 'SearchService';
@@ -18,27 +20,97 @@ interface SerperResponse {
 }
 
 /**
+ * Builds search parameters based on search type.
+ */
+const buildSearchParams = (query: string, numResults: number, searchType: SearchType): any => {
+    const baseParams: any = {
+        q: query,
+        num: numResults,
+    };
+
+    // Add type-specific parameters
+    switch (searchType) {
+        case 'news':
+            // For news, we can add time-based filters or news-specific parameters
+            baseParams.tbs = 'qdr:w'; // Past week
+            break;
+        case 'academic':
+            // For academic searches, we can add site restrictions or academic domains
+            // Note: Serper API doesn't have direct academic search, but we can filter results
+            baseParams.q = `${query} site:edu OR site:org OR site:gov OR site:ac.uk OR site:ac.za`;
+            break;
+        case 'web':
+        default:
+            // Default web search, no additional params needed
+            break;
+    }
+
+    return baseParams;
+};
+
+/**
  * Performs a web search using Serper.dev (Google Search API).
+ * Supports different search types: web, news, academic.
  * Falls back to mock data if API key is not configured.
  */
-export const searchWeb = async (query: string, numResults: number = 5): Promise<SearchResult[]> => {
+export const searchWeb = async (
+    query: string,
+    numResults: number = 5,
+    searchType: SearchType = 'web'
+): Promise<SearchResult[]> => {
+    // Create cache key that includes search type
+    const cacheKey = `${searchType}:${query}`;
+    
+    // Check cache first
+    const cached = await getCachedSearchResults(cacheKey);
+    if (cached && cached.length > 0) {
+        logger.info(`Cache hit for ${searchType} search: "${query.substring(0, 50)}..."`, CONTEXT);
+        return cached.slice(0, numResults);
+    }
+
     if (!env.serperApiKey) {
         logger.warn('SERPER_API_KEY not set, using mock search results', CONTEXT);
-        return getMockResults(query);
+        const mockResults = getMockResults(query, searchType);
+        await cacheSearchResults(cacheKey, mockResults);
+        return mockResults;
     }
 
     try {
-        logger.info(`Searching for: "${query}"`, CONTEXT);
+        logger.info(`Searching (${searchType}) for: "${query}"`, CONTEXT);
 
-        const response = await axios.post<SerperResponse>(
-            SERPER_API_URL,
-            { q: query, num: numResults },
+        const searchParams = buildSearchParams(query, numResults, searchType);
+
+        // Retry search API call with exponential backoff
+        const response = await retry(
+            async () => {
+                return await axios.post<SerperResponse>(
+                    SERPER_API_URL,
+                    searchParams,
+                    {
+                        headers: {
+                            'X-API-KEY': env.serperApiKey,
+                            'Content-Type': 'application/json',
+                        },
+                        timeout: 5000,
+                    }
+                );
+            },
             {
-                headers: {
-                    'X-API-KEY': env.serperApiKey,
-                    'Content-Type': 'application/json',
+                maxAttempts: 3,
+                initialDelayMs: 1000,
+                maxDelayMs: 5000,
+                backoffMultiplier: 2,
+                retryableErrors: (error: any) => {
+                    // Retry on network errors, timeouts, and 5xx/429 status codes
+                    if (error.code === 'ECONNRESET' || error.code === 'ETIMEDOUT') {
+                        return true;
+                    }
+                    if (error.response) {
+                        const status = error.response.status;
+                        return status >= 500 || status === 429;
+                    }
+                    return error.message?.includes('timeout') || false;
                 },
-                timeout: 5000,
             }
         );
 
@@ -49,12 +121,15 @@ export const searchWeb = async (query: string, numResults: number = 5): Promise<
             favicon: item.favicon || getFaviconUrl(item.link),
         }));
 
-        logger.info(`Found ${results.length} search results`, CONTEXT);
+        // Cache results with search type in key
+        await cacheSearchResults(cacheKey, results);
+
+        logger.info(`Found ${results.length} ${searchType} search results`, CONTEXT);
         return results;
     } catch (error: any) {
-        logger.error(`Search API failed: ${error.message}`, CONTEXT, error);
+        logger.error(`Search API failed after retries: ${error.message}`, CONTEXT, error);
         // Fallback to mock on error
-        return getMockResults(query);
+        return getMockResults(query, searchType);
     }
 };
 
@@ -73,15 +148,55 @@ const getFaviconUrl = (url: string): string => {
 /**
  * Returns mock search results for development/testing.
  */
-const getMockResults = (query: string): SearchResult[] => {
-    logger.debug(`Returning mock results for: "${query}"`, CONTEXT);
-    return [
+const getMockResults = (query: string, searchType: SearchType = 'web'): SearchResult[] => {
+    logger.debug(`Returning mock ${searchType} results for: "${query}"`, CONTEXT);
+    
+    const baseResults: SearchResult[] = [
         {
             title: `Wikipedia - ${query}`,
             link: `https://en.wikipedia.org/wiki/${encodeURIComponent(query.replace(/ /g, '_'))}`,
             snippet: `Learn about ${query} from Wikipedia, the free encyclopedia.`,
             favicon: 'https://www.wikipedia.org/static/favicon/wikipedia.ico',
         },
+    ];
+
+    if (searchType === 'news') {
+        return [
+            ...baseResults,
+            {
+                title: `${query} - Breaking News`,
+                link: 'https://news.example.com/breaking',
+                snippet: `Latest breaking news about ${query}.`,
+                favicon: 'https://news.example.com/favicon.ico',
+            },
+            {
+                title: `${query} - Recent Updates`,
+                link: 'https://news.example.com/recent',
+                snippet: `Recent news and updates about ${query}.`,
+                favicon: 'https://news.example.com/favicon.ico',
+            },
+        ];
+    } else if (searchType === 'academic') {
+        return [
+            ...baseResults,
+            {
+                title: `${query} - Research Paper`,
+                link: 'https://scholar.example.edu/paper',
+                snippet: `Academic research paper about ${query}.`,
+                favicon: 'https://scholar.example.edu/favicon.ico',
+            },
+            {
+                title: `${query} - Academic Study`,
+                link: 'https://university.example.edu/study',
+                snippet: `Academic study and analysis of ${query}.`,
+                favicon: 'https://university.example.edu/favicon.ico',
+            },
+        ];
+    }
+
+    // Default web results
+    return [
+        ...baseResults,
         {
             title: `Understanding ${query} - Complete Guide`,
             link: 'https://example.com/guide',

@@ -3,6 +3,10 @@ export interface SearchResult {
     link: string;
     snippet: string;
     favicon?: string;
+    publishedDate?: Date;
+    author?: string;
+    category?: 'news' | 'academic' | 'blog' | 'forum' | 'other';
+    readingTime?: number; // minutes
 }
 
 export interface ScrapedContent {
@@ -10,6 +14,10 @@ export interface ScrapedContent {
     title: string;
     content: string;
     success: boolean;
+    publishedDate?: Date;
+    author?: string;
+    category?: 'news' | 'academic' | 'blog' | 'forum' | 'other';
+    readingTime?: number; // minutes
 }
 
 export interface RAGContext {
@@ -34,4 +42,23 @@ export interface RankedSource extends SearchResult {
     authorityScore: number;
     totalScore: number;
     scrapedContent?: string;
+}
+
+/**
+ * Search type options for different search strategies.
+ */
+export type SearchType = 'web' | 'news' | 'academic';
+
+/**
+ * Answer style options for different response formats.
+ */
+export type AnswerStyle = 'concise' | 'detailed' | 'bullet-points';
+
+/**
+ * Extended chat request with optional search type.
+ */
+export interface ExtendedChatRequest extends ChatRequest {
+    searchType?: SearchType;
+    conversationId?: string;
+    answerStyle?: AnswerStyle;
 }
