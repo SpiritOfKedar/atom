@@ -2,11 +2,12 @@
   "name": "server",
   "version": "1.0.0",
   "description": "",
-  "main": "index.ts",
+  "main": "src/server.ts",
   "scripts": {
-    "start": "ts-node index.ts",
-    "dev": "nodemon index.ts",
-    "build": "tsc"
+    "start": "ts-node src/server.ts",
+    "dev": "nodemon src/server.ts",
+    "build": "tsc",
+    "lint": "tsc --noEmit"
   },
   "keywords": [],
   "author": "",
