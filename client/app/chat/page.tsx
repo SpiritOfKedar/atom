@@ -36,17 +36,17 @@ export default function ChatPage() {
     const [messages, setMessages] = useState<Message[]>([]);
     const [guestMessageCount, setGuestMessageCount] = useState(0);
     const [showAuthModal, setShowAuthModal] = useState(false);
-    const [initialQueryProcessed, setInitialQueryProcessed] = useState(false);
 
     const bottomRef = useRef<HTMLDivElement>(null);
+    const initialQueryProcessedRef = useRef(false);
 
-    // Process initial query from URL
+    // Process initial query from URL - using ref to prevent double execution
     useEffect(() => {
-        if (initialQuery && !initialQueryProcessed) {
-            setInitialQueryProcessed(true);
+        if (initialQuery && !initialQueryProcessedRef.current) {
+            initialQueryProcessedRef.current = true;
             processQuery(initialQuery);
         }
-    }, [initialQuery, initialQueryProcessed]);
+    }, [initialQuery]);
 
     const processQuery = async (userQuery: string) => {
         // Check guest message limit
