@@ -125,7 +125,8 @@ export default function LandingPage() {
                 <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
                     <div className="flex items-center justify-between h-16">
                         {/* Logo */}
-                        <Link href="/landing" className="flex items-center">
+                        <Link href="/landing" className="flex items-center gap-2">
+                            <img src="/atom-logo.png" alt="Atom" className="w-8 h-8 rounded-lg" />
                             <span className="text-xl font-semibold text-gray-900">Atom</span>
                         </Link>
 

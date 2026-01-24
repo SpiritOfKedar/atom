@@ -108,9 +108,7 @@ export function Sidebar({
                 isOpen ? "w-64" : "w-16"
             )}>
                 <div className="p-4 flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-500 to-green-600 flex items-center justify-center shadow-lg shadow-emerald-500/20 shrink-0">
-                        <Sparkles className="w-4 h-4 text-white" />
-                    </div>
+                    <img src="/atom-logo.png" alt="Atom" className="w-8 h-8 shrink-0 invert" />
                     {isOpen && (
                         <span className="text-lg font-semibold bg-gradient-to-r from-white to-emerald-300 bg-clip-text text-transparent animate-in fade-in duration-300">
                             Atom
