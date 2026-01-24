@@ -4,12 +4,12 @@ import React, { useEffect, useState } from 'react';
 import {
     SignedIn,
     SignedOut,
-    UserButton,
     SignInButton,
     useAuth,
+    useClerk,
+    useUser,
 } from '@clerk/nextjs';
 import {
-    Sparkles,
     Plus,
     Clock,
     Compass,
@@ -19,8 +19,10 @@ import {
     ChevronRight,
     MoreHorizontal,
     LogIn,
+    LogOut,
     Trash2,
-    MessageSquare
+    MessageSquare,
+    User
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -48,6 +50,8 @@ export function Sidebar({
     activeConversationId
 }: SidebarProps) {
     const { isSignedIn, getToken } = useAuth();
+    const { signOut } = useClerk();
+    const { user } = useUser();
     const [conversations, setConversations] = useState<ConversationListItem[]>([]);
     const [loading, setLoading] = useState(false);
 
@@ -102,7 +106,7 @@ export function Sidebar({
     return (
         <>
             <aside className={cn(
-                "fixed left-0 top-0 h-full z-50 flex flex-col",
+                "fixed left-0 top-0 h-full z-40 flex flex-col overflow-visible",
                 "bg-black/40 backdrop-blur-xl border-r border-emerald-900/30",
                 "transition-all duration-300",
                 isOpen ? "w-64" : "w-16"
@@ -188,7 +192,10 @@ export function Sidebar({
                     </button>
                 </div>
 
-                <div className="p-4 border-t border-slate-800/50">
+                <div className={cn(
+                    "border-t border-slate-800/50",
+                    isOpen ? "p-4" : "px-2 py-4"
+                )}>
                     <button className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800/50 transition-all duration-200">
                         <Settings className="w-5 h-5 shrink-0" />
                         {isOpen && <span className="text-sm font-medium">Settings</span>}
@@ -207,29 +214,38 @@ export function Sidebar({
                     </Button>
                 </div>
 
-                <div className="p-4 border-t border-emerald-900/30">
+                <div className={cn(
+                    "border-t border-emerald-900/30 space-y-2",
+                    isOpen ? "p-4" : "px-2 py-4"
+                )}>
                     <SignedIn>
                         <div className={cn(
-                            "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg",
-                            "bg-gradient-to-r from-emerald-500/10 to-green-500/10 border border-emerald-500/20"
+                            "w-full flex items-center gap-3 rounded-lg bg-gradient-to-r from-emerald-500/10 to-green-500/10 border border-emerald-500/20",
+                            isOpen ? "px-3 py-2.5" : "p-2 justify-center"
                         )}>
-                            <UserButton
-                                appearance={{
-                                    elements: {
-                                        avatarBox: "w-8 h-8",
-                                        userButtonPopoverCard: "bg-slate-900 border border-emerald-900/30",
-                                        userButtonPopoverActionButton: "text-slate-300 hover:text-white hover:bg-slate-800",
-                                        userButtonPopoverActionButtonText: "text-slate-300",
-                                        userButtonPopoverFooter: "hidden",
-                                    }
-                                }}
-                            />
+                            <div className="w-8 h-8 rounded-full bg-emerald-600 flex items-center justify-center shrink-0">
+                                {user?.imageUrl ? (
+                                    <img src={user.imageUrl} alt="" className="w-8 h-8 rounded-full" />
+                                ) : (
+                                    <User className="w-4 h-4 text-white" />
+                                )}
+                            </div>
                             {isOpen && (
-                                <span className="text-sm font-medium text-emerald-300 animate-in fade-in duration-300">
-                                    My Account
+                                <span className="text-sm font-medium text-emerald-300 truncate flex-1">
+                                    {user?.firstName || user?.username || 'User'}
                                 </span>
                             )}
                         </div>
+                        <button
+                            onClick={() => signOut({ redirectUrl: '/landing' })}
+                            className={cn(
+                                "w-full flex items-center gap-3 rounded-lg text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-all duration-200",
+                                isOpen ? "px-3 py-2.5" : "p-2 justify-center"
+                            )}
+                        >
+                            <LogOut className="w-5 h-5 shrink-0" />
+                            {isOpen && <span className="text-sm font-medium">Sign Out</span>}
+                        </button>
                     </SignedIn>
                     <SignedOut>
                         <SignInButton mode="modal">
