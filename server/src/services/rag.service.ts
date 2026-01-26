@@ -1,8 +1,9 @@
 import { Response } from 'express';
 import { searchWeb } from './search.service';
-import { scrapeMultiple, extractRelevantContent } from './scrape.service';
+import { extractRelevantContent } from './scrape.service';
+import { addScrapeJob, scrapeQueueEvents } from '../queues/scraper.queue';
 import { streamCompletion, generateStandaloneQuery } from './llm.service';
-import { AnswerStyle, RAGContext, SearchResult, SearchType } from '../types';
+import { AnswerStyle, RAGContext, SearchResult, SearchType, ScrapedContent } from '../types';
 import { logger } from '../utils/logger';
 import { IMessage } from '../models/conversation.model';
 import { rankSources } from './source-ranking.service';
@@ -138,7 +139,10 @@ export const runRAGPipeline = async (
 
     sendStatus(res, 'Reading sources...');
     const urls = searchResults.map((r) => r.link);
-    const scrapedContents = await scrapeMultiple(urls);
+
+    // Add scrape job to queue and wait for completion
+    const job = await addScrapeJob(urls);
+    const scrapedContents = await job.waitUntilFinished(scrapeQueueEvents) as ScrapedContent[];
 
     // Rank sources by relevance, freshness, and authority
     sendStatus(res, 'Ranking sources...');
