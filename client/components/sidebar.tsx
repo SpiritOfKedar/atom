@@ -1,5 +1,7 @@
 'use client';
 
+
+import { useRouter, usePathname } from 'next/navigation';
 import React, { useEffect, useState } from 'react';
 import {
     SignedIn,
@@ -37,9 +39,9 @@ interface SidebarProps {
 }
 
 const NAV_ITEMS = [
-    { icon: Compass, label: 'Discover', active: false },
-    { icon: LayoutGrid, label: 'Spaces', active: false },
-    { icon: TrendingUp, label: 'Trending', active: false },
+    { icon: Compass, label: 'Discover', active: false, href: '/discover' },
+    { icon: LayoutGrid, label: 'Spaces', active: false, href: '/spaces' },
+    { icon: TrendingUp, label: 'Trending', active: false, href: '/trending' },
 ];
 
 export function Sidebar({
@@ -52,6 +54,8 @@ export function Sidebar({
     const { isSignedIn, getToken } = useAuth();
     const { signOut } = useClerk();
     const { user } = useUser();
+    const router = useRouter();
+    const pathname = usePathname();
     const [conversations, setConversations] = useState<ConversationListItem[]>([]);
     const [loading, setLoading] = useState(false);
 
@@ -103,6 +107,10 @@ export function Sidebar({
         return date.toLocaleDateString();
     };
 
+    const handleNavigation = (path: string) => {
+        router.push(path);
+    };
+
     return (
         <>
             <aside className={cn(
@@ -111,7 +119,7 @@ export function Sidebar({
                 "transition-all duration-300",
                 isOpen ? "w-64" : "w-16"
             )}>
-                <div className="p-4 flex items-center gap-3">
+                <div className="p-4 flex items-center gap-3 cursor-pointer" onClick={() => router.push('/')}>
                     <img src="/atom-logo.png" alt="Atom" className="w-8 h-8 shrink-0 invert" />
                     {isOpen && (
                         <span className="text-lg font-semibold bg-gradient-to-r from-white to-emerald-300 bg-clip-text text-transparent animate-in fade-in duration-300">
@@ -172,7 +180,13 @@ export function Sidebar({
                         {NAV_ITEMS.map((item, index) => (
                             <button
                                 key={index}
-                                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800/50 transition-all duration-200"
+                                onClick={() => item.href && handleNavigation(item.href)}
+                                className={cn(
+                                    "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200",
+                                    pathname === item.href
+                                        ? "bg-emerald-500/10 text-emerald-300"
+                                        : "text-slate-400 hover:text-white hover:bg-slate-800/50"
+                                )}
                             >
                                 <item.icon className="w-5 h-5 shrink-0" />
                                 {isOpen && (
