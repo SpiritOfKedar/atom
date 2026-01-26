@@ -14,6 +14,10 @@
   "license": "ISC",
   "dependencies": {
     "@clerk/backend": "^2.29.4",
+    "@langchain/community": "^1.1.7",
+    "@langchain/core": "^1.1.17",
+    "@langchain/mongodb": "^1.1.0",
+    "@langchain/openai": "^1.2.3",
     "@types/uuid": "^10.0.0",
     "axios": "^1.13.2",
     "bullmq": "^5.67.1",
@@ -22,6 +26,8 @@
     "dotenv": "^17.2.3",
     "express": "^5.2.1",
     "express-rate-limit": "^8.2.1",
+    "langchain": "^1.2.13",
+    "mongodb": "^7.0.0",
     "mongoose": "^9.1.5",
     "openai": "^6.16.0",
     "uuid": "^13.0.0"

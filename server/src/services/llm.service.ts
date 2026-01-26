@@ -144,7 +144,7 @@ export const streamCompletion = async (
     onToken?: (token: string) => void,
     conversationHistory?: IMessage[],
     answerStyle: AnswerStyle = 'detailed'
-): Promise<void> => {
+): Promise<string> => {
     const prompt = buildPrompt(query, contexts, conversationHistory, answerStyle);
 
     logger.info(`Streaming completion for query: "${query.substring(0, 50)}..."`, CONTEXT);
@@ -162,9 +162,12 @@ export const streamCompletion = async (
             max_tokens: 1024,
         });
 
+        let fullContent = '';
+
         for await (const chunk of stream) {
             const content = chunk.choices[0]?.delta?.content;
             if (content) {
+                fullContent += content;
                 res.write(JSON.stringify({ type: 'token', data: content }) + '\n');
                 if (onToken) {
                     onToken(content);
@@ -173,6 +176,7 @@ export const streamCompletion = async (
         }
 
         logger.info('Streaming completed successfully', CONTEXT);
+        return fullContent;
     } catch (error: any) {
         logger.error(`OpenAI streaming failed: ${error.message}`, CONTEXT, error);
         throw error;

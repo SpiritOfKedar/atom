@@ -9,6 +9,7 @@ import { IMessage } from '../models/conversation.model';
 import { rankSources } from './source-ranking.service';
 import { optimizeQuery, suggestSearchType } from './query-optimization.service';
 import { RankedSource } from '../types';
+import { searchMemory, storeMemory } from './vector-store.service';
 
 const CONTEXT = 'RAGService';
 
@@ -115,6 +116,14 @@ export const runRAGPipeline = async (
         // Continue with unoptimized query
     }
 
+    // Step 3: Retrieve Long-term Memory (Vector Search)
+    const userId = 'default-user'; // TODO: Get from auth context
+    const memories = await searchMemory(userId, effectiveQuery);
+    if (memories.length > 0) {
+        logger.info(`Retrieved ${memories.length} memories for query`, CONTEXT);
+        sendStatus(res, 'Recalling past interactions...');
+    }
+
     const searchStatusMessage = effectiveSearchType === 'news'
         ? 'Searching news...'
         : effectiveSearchType === 'academic'
@@ -152,8 +161,21 @@ export const runRAGPipeline = async (
     rankedSources = deduplicateSources(rankedSources);
 
     // Build RAG contexts from ranked sources (highest score first)
+    const ragContexts: RAGContext[] = [];
+
+    // 1. Add Memories first (High priority context)
+    memories.forEach((mem, i) => {
+        ragContexts.push({
+            index: -(i + 1), // Negative index to distinguish from web results
+            title: `Memory: ${mem.metadata?.date ? new Date(mem.metadata.date).toLocaleDateString() : 'Past Interaction'}`,
+            url: 'memory://internal',
+            content: mem.content,
+        });
+    });
+
+    // 2. Add Web Results
     // Use intelligent content extraction with different max lengths based on rank
-    const ragContexts: RAGContext[] = rankedSources
+    const webContexts = rankedSources
         .filter((rs) => {
             const scraped = scrapedContents.find(sc => sc.url === rs.link);
             const content = scraped?.content || rs.snippet;
@@ -177,7 +199,9 @@ export const runRAGPipeline = async (
             };
         });
 
-    if (ragContexts.length === 0) {
+    ragContexts.push(...webContexts);
+
+    if (webContexts.length === 0) {
         logger.warn('No valid content scraped, using search snippets as fallback', CONTEXT);
         rankedSources.forEach((rs, index) => {
             ragContexts.push({
@@ -214,7 +238,16 @@ export const runRAGPipeline = async (
     logger.info(`Built ${ragContexts.length} RAG contexts`, CONTEXT);
 
     sendStatus(res, 'Generating answer...');
-    await streamCompletion(query, ragContexts, res, onToken, conversationHistory, answerStyle);
+    const fullAnswer = await streamCompletion(query, ragContexts, res, onToken, conversationHistory, answerStyle);
+
+    // Save to Memory (fire and forget or await)
+    // We store the generic "User Query" + "AI Answer" combo
+    if (fullAnswer && fullAnswer.length > 50) {
+        // Run in background to not delay response close (optional, but Express stream ends when we return)
+        storeMemory(userId, `Q: ${effectiveQuery}\nA: ${fullAnswer}`, {
+            tags: ['conversation', effectiveSearchType],
+        }).catch(err => logger.error(`Failed to store memory: ${err.message}`, CONTEXT));
+    }
 
     return {
         sources: rankedSources,
