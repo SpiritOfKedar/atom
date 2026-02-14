@@ -1,9 +1,10 @@
 import { Request, Response, NextFunction } from 'express';
 import { createClerkClient, verifyToken } from '@clerk/backend';
 import { logger } from '../utils/logger';
+import { env } from '../config/env';
 
 const clerkClient = createClerkClient({
-    secretKey: process.env.CLERK_SECRET_KEY
+    secretKey: env.clerkSecretKey
 });
 
 export interface AuthenticatedRequest extends Request {
@@ -26,7 +27,7 @@ export const requireAuth = async (
         const token = authHeader.split(' ')[1];
 
         const payload = await verifyToken(token, {
-            secretKey: process.env.CLERK_SECRET_KEY!,
+            secretKey: env.clerkSecretKey!,
         });
 
         req.userId = payload.sub;
@@ -48,7 +49,7 @@ export const optionalAuth = async (
         if (authHeader && authHeader.startsWith('Bearer ')) {
             const token = authHeader.split(' ')[1];
             const payload = await verifyToken(token, {
-                secretKey: process.env.CLERK_SECRET_KEY!,
+                secretKey: env.clerkSecretKey!,
             });
             req.userId = payload.sub;
         }

@@ -3,13 +3,13 @@ import { searchWeb } from './search.service';
 import { extractRelevantContent } from './scrape.service';
 import { addScrapeJob, scrapeQueueEvents } from '../queues/scraper.queue';
 import { streamCompletion, generateStandaloneQuery } from './llm.service';
-import { AnswerStyle, RAGContext, SearchResult, SearchType, ScrapedContent } from '../types';
+import { AnswerStyle, ModelProvider, RAGContext, SearchResult, SearchType, ScrapedContent } from '../types';
 import { logger } from '../utils/logger';
 import { IMessage } from '../models/conversation.model';
 import { rankSources } from './source-ranking.service';
 import { optimizeQuery, suggestSearchType } from './query-optimization.service';
 import { RankedSource } from '../types';
-import { searchMemory, storeMemory } from './vector-store.service';
+import { searchMemory, storeMemory, MemoryResult } from './vector-store.service';
 
 const CONTEXT = 'RAGService';
 
@@ -21,9 +21,42 @@ interface RAGPipelineResult {
 
 /**
  * Sends a status update to the client via SSE.
+ * Silently ignores write errors (e.g. client disconnected).
  */
 const sendStatus = (res: Response, status: string): void => {
-    res.write(JSON.stringify({ type: 'status', data: status }) + '\n');
+    try {
+        if (!res.writableEnded) {
+            res.write(JSON.stringify({ type: 'status', data: status }) + '\n');
+        }
+    } catch {
+        // Client likely disconnected; ignore
+    }
+};
+
+/**
+ * Safe write helper — ignores errors from closed connections.
+ */
+const safeWrite = (res: Response, payload: Record<string, unknown>): void => {
+    try {
+        if (!res.writableEnded) {
+            res.write(JSON.stringify(payload) + '\n');
+        }
+    } catch {
+        // ignore
+    }
+};
+
+const toIsoDateString = (value: unknown): string | undefined => {
+    if (!value) {
+        return undefined;
+    }
+
+    if (value instanceof Date) {
+        return Number.isNaN(value.getTime()) ? undefined : value.toISOString();
+    }
+
+    const parsed = new Date(String(value));
+    return Number.isNaN(parsed.getTime()) ? undefined : parsed.toISOString();
 };
 
 /**
@@ -78,8 +111,14 @@ export const runRAGPipeline = async (
     onSources?: (sources: any[]) => void,
     conversationHistory?: IMessage[],
     searchType?: SearchType,
-    answerStyle: AnswerStyle = 'detailed'
+    answerStyle: AnswerStyle = 'detailed',
+    modelProvider: ModelProvider = 'openai',
+    userId?: string,
+    isClientConnected?: () => boolean
 ): Promise<RAGPipelineResult> => {
+    // Helper: check if the client is still listening; abort early if not
+    const shouldContinue = (): boolean => !isClientConnected || isClientConnected();
+
     logger.info(`Starting RAG pipeline for: "${query}"`, CONTEXT);
 
     // Determine search type if not provided
@@ -93,7 +132,7 @@ export const runRAGPipeline = async (
     if (conversationHistory && conversationHistory.length > 0) {
         sendStatus(res, 'Analyzing follow-up question...');
         try {
-            effectiveQuery = await generateStandaloneQuery(query, conversationHistory);
+            effectiveQuery = await generateStandaloneQuery(query, conversationHistory, modelProvider);
         } catch (error: any) {
             logger.warn(`Standalone query generation failed: ${error.message}`, CONTEXT);
             // Continue with original query
@@ -103,7 +142,7 @@ export const runRAGPipeline = async (
     // Step 2: Optimize the query using LLM
     sendStatus(res, 'Optimizing query...');
     try {
-        const optimizedQuery = await optimizeQuery(effectiveQuery);
+        const optimizedQuery = await optimizeQuery(effectiveQuery, modelProvider);
         if (optimizedQuery !== effectiveQuery) {
             logger.debug(
                 `Query optimized: "${effectiveQuery.substring(0, 60)}..." -> "${optimizedQuery.substring(0, 60)}..."`,
@@ -117,11 +156,17 @@ export const runRAGPipeline = async (
     }
 
     // Step 3: Retrieve Long-term Memory (Vector Search)
-    const userId = 'default-user'; // TODO: Get from auth context
-    const memories = await searchMemory(userId, effectiveQuery);
+    const effectiveUserId = userId || 'anonymous';
+    const memoryEnabled = modelProvider === 'openai';
+    const memories = memoryEnabled ? await searchMemory(effectiveUserId, effectiveQuery) : [];
     if (memories.length > 0) {
         logger.info(`Retrieved ${memories.length} memories for query`, CONTEXT);
         sendStatus(res, 'Recalling past interactions...');
+    } else if (!memoryEnabled) {
+        logger.debug(
+            `Skipping vector memory for provider=${modelProvider} (OpenAI embeddings only)`,
+            CONTEXT
+        );
     }
 
     const searchStatusMessage = effectiveSearchType === 'news'
@@ -129,6 +174,11 @@ export const runRAGPipeline = async (
         : effectiveSearchType === 'academic'
             ? 'Searching academic sources...'
             : 'Searching the web...';
+
+    if (!shouldContinue()) {
+        logger.info('Client disconnected before search, aborting pipeline', CONTEXT);
+        return { sources: [], ragContexts: [], success: false };
+    }
 
     sendStatus(res, searchStatusMessage);
     const searchResults = await searchWeb(effectiveQuery, 5, effectiveSearchType);
@@ -143,7 +193,7 @@ export const runRAGPipeline = async (
         link: s.link,
         favicon: s.favicon,
     }));
-    res.write(JSON.stringify({ type: 'sources', data: initialSourcesPayload }) + '\n');
+    safeWrite(res, { type: 'sources', data: initialSourcesPayload });
     logger.info(`Sent ${searchResults.length} initial sources to client`, CONTEXT);
 
     sendStatus(res, 'Reading sources...');
@@ -162,11 +212,12 @@ export const runRAGPipeline = async (
 
     // Build RAG contexts from ranked sources (highest score first)
     const ragContexts: RAGContext[] = [];
+    let contextIndex = 1; // Use sequential positive indices for all contexts
 
     // 1. Add Memories first (High priority context)
-    memories.forEach((mem, i) => {
+    memories.forEach((mem) => {
         ragContexts.push({
-            index: -(i + 1), // Negative index to distinguish from web results
+            index: contextIndex++,
             title: `Memory: ${mem.metadata?.date ? new Date(mem.metadata.date).toLocaleDateString() : 'Past Interaction'}`,
             url: 'memory://internal',
             content: mem.content,
@@ -192,7 +243,7 @@ export const runRAGPipeline = async (
             const optimizedContent = extractRelevantContent(rawContent, query, maxLength);
 
             return {
-                index: index + 1,
+                index: contextIndex++,
                 title: scraped?.title || rs.title || 'Unknown',
                 url: rs.link,
                 content: optimizedContent,
@@ -203,9 +254,9 @@ export const runRAGPipeline = async (
 
     if (webContexts.length === 0) {
         logger.warn('No valid content scraped, using search snippets as fallback', CONTEXT);
-        rankedSources.forEach((rs, index) => {
+        rankedSources.forEach((rs) => {
             ragContexts.push({
-                index: index + 1,
+                index: contextIndex++,
                 title: rs.title,
                 url: rs.link,
                 content: rs.snippet,
@@ -221,7 +272,7 @@ export const runRAGPipeline = async (
             link: rs.link,
             favicon: rs.favicon,
             score: rs.totalScore, // Include score for debugging/UI
-            publishedDate: scraped?.publishedDate?.toISOString(),
+            publishedDate: toIsoDateString(scraped?.publishedDate),
             author: scraped?.author,
             category: scraped?.category,
             readingTime: scraped?.readingTime,
@@ -229,7 +280,7 @@ export const runRAGPipeline = async (
     });
 
     // Re-send sources in ranked order
-    res.write(JSON.stringify({ type: 'sources', data: rankedSourcesPayload }) + '\n');
+    safeWrite(res, { type: 'sources', data: rankedSourcesPayload });
 
     if (onSources) {
         onSources(rankedSourcesPayload);
@@ -237,14 +288,27 @@ export const runRAGPipeline = async (
 
     logger.info(`Built ${ragContexts.length} RAG contexts`, CONTEXT);
 
+    if (!shouldContinue()) {
+        logger.info('Client disconnected before LLM streaming, aborting pipeline', CONTEXT);
+        return { sources: rankedSources, ragContexts, success: false };
+    }
+
     sendStatus(res, 'Generating answer...');
-    const fullAnswer = await streamCompletion(query, ragContexts, res, onToken, conversationHistory, answerStyle);
+    const fullAnswer = await streamCompletion(
+        query,
+        ragContexts,
+        res,
+        onToken,
+        conversationHistory,
+        answerStyle,
+        modelProvider
+    );
 
     // Save to Memory (fire and forget or await)
     // We store the generic "User Query" + "AI Answer" combo
-    if (fullAnswer && fullAnswer.length > 50) {
+    if (memoryEnabled && fullAnswer && fullAnswer.length > 50) {
         // Run in background to not delay response close (optional, but Express stream ends when we return)
-        storeMemory(userId, `Q: ${effectiveQuery}\nA: ${fullAnswer}`, {
+        storeMemory(effectiveUserId, `Q: ${effectiveQuery}\nA: ${fullAnswer}`, {
             tags: ['conversation', effectiveSearchType],
         }).catch(err => logger.error(`Failed to store memory: ${err.message}`, CONTEXT));
     }

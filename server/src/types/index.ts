@@ -55,10 +55,16 @@ export type SearchType = 'web' | 'news' | 'academic';
 export type AnswerStyle = 'concise' | 'detailed' | 'bullet-points';
 
 /**
+ * Supported LLM providers for search answer generation.
+ */
+export type ModelProvider = 'openai' | 'claude' | 'gemini';
+
+/**
  * Extended chat request with optional search type.
  */
 export interface ExtendedChatRequest extends ChatRequest {
     searchType?: SearchType;
     conversationId?: string;
     answerStyle?: AnswerStyle;
+    modelProvider?: ModelProvider;
 }

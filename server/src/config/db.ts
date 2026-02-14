@@ -1,11 +1,10 @@
 import mongoose from 'mongoose';
 import { logger } from '../utils/logger';
-
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/atom';
+import { env } from './env';
 
 export const connectDB = async (): Promise<void> => {
     try {
-        await mongoose.connect(MONGODB_URI);
+        await mongoose.connect(env.mongodbUri);
         logger.info('MongoDB connected successfully', 'Database');
     } catch (error) {
         logger.error('MongoDB connection failed', 'Database', error as Error);

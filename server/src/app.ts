@@ -54,8 +54,10 @@ app.use((err: Error | ApiError, _req: Request, res: Response, _next: NextFunctio
     logger.error(err.message, 'ErrorHandler', err);
 
     if (err instanceof ApiError) {
+        // ApiError messages are intentionally user-facing
         res.status(err.statusCode).json({ error: err.message });
     } else {
+        // Never expose raw internal error messages to the client
         res.status(500).json({ error: 'Internal Server Error' });
     }
 });

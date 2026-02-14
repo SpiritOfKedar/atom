@@ -26,6 +26,8 @@ interface ChatInterfaceProps {
     onSubmit: (e: FormEvent) => void;
     isLoading: boolean;
     hasSearched: boolean;
+    modelProvider: 'openai' | 'claude' | 'gemini';
+    setModelProvider: (provider: 'openai' | 'claude' | 'gemini') => void;
 }
 
 const QUICK_SUGGESTIONS = [
@@ -42,7 +44,15 @@ interface Attachment {
     file: File;
 }
 
-export function ChatInterface({ query, setQuery, onSubmit, isLoading, hasSearched }: ChatInterfaceProps) {
+export function ChatInterface({
+    query,
+    setQuery,
+    onSubmit,
+    isLoading,
+    hasSearched,
+    modelProvider,
+    setModelProvider,
+}: ChatInterfaceProps) {
     const [attachments, setAttachments] = useState<Attachment[]>([]);
     const [showAttachMenu, setShowAttachMenu] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -188,6 +198,17 @@ export function ChatInterface({ query, setQuery, onSubmit, isLoading, hasSearche
                                         <Sparkles className="w-3.5 h-3.5 mr-1.5" />
                                         Focus
                                     </Button>
+
+                                    <select
+                                        value={modelProvider}
+                                        onChange={(e) => setModelProvider(e.target.value as 'openai' | 'claude' | 'gemini')}
+                                        className="h-8 rounded-lg bg-slate-900/90 border border-slate-700 text-slate-200 text-xs px-2 outline-none focus:border-emerald-500"
+                                        aria-label="Select AI model provider"
+                                    >
+                                        <option value="openai">OpenAI (gpt-4o-mini)</option>
+                                        <option value="claude">Claude (3.5 Haiku)</option>
+                                        <option value="gemini">Gemini (2.5 Flash)</option>
+                                    </select>
                                 </div>
 
                                 <div className="flex items-center gap-1">

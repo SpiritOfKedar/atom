@@ -17,6 +17,7 @@ interface CacheEntry<T> {
  * In-memory cache fallback (used when Redis is not available).
  */
 const memoryCache = new Map<string, CacheEntry<any>>();
+const MAX_MEMORY_CACHE_SIZE = 500;
 
 /**
  * Generates a cache key from a string.
@@ -83,9 +84,18 @@ export const set = async <T>(key: string, value: T, ttlSeconds: number): Promise
         ttl: ttlSeconds * 1000,
     });
     
-    // Cleanup expired entries periodically
-    if (memoryCache.size > 1000) {
+    // Cleanup expired entries and enforce max size
+    if (memoryCache.size > MAX_MEMORY_CACHE_SIZE) {
         cleanupMemoryCache();
+        // If still over limit after cleanup, evict oldest entries
+        if (memoryCache.size > MAX_MEMORY_CACHE_SIZE) {
+            const entriesToRemove = memoryCache.size - MAX_MEMORY_CACHE_SIZE;
+            const iterator = memoryCache.keys();
+            for (let i = 0; i < entriesToRemove; i++) {
+                const key = iterator.next().value;
+                if (key) memoryCache.delete(key);
+            }
+        }
     }
 };
 

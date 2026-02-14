@@ -11,7 +11,12 @@ const startServer = async (): Promise<void> => {
         await initRedis();
         initScraperWorker();
 
-        app.listen(env.port, () => {
+        app.listen(env.port, (err?: Error) => {
+            if (err) {
+                logger.error(`Failed to bind to port ${env.port}: ${err.message}`, 'Server', err);
+                process.exit(1);
+            }
+
             logger.info(`🚀 Server running on http://localhost:${env.port}`, 'Server');
             logger.info(`📡 Environment: ${env.nodeEnv}`, 'Server');
             logger.info(`🔗 CORS Origin: ${env.corsOrigin}`, 'Server');

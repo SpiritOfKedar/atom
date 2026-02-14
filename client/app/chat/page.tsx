@@ -19,6 +19,8 @@ interface Source {
     favicon: string;
 }
 
+type ModelProvider = 'openai' | 'claude' | 'gemini';
+
 const GUEST_MESSAGE_LIMIT = 2;
 
 export default function ChatPage() {
@@ -26,6 +28,11 @@ export default function ChatPage() {
     const { user } = useUser();
     const searchParams = useSearchParams();
     const initialQuery = searchParams.get('q') || '';
+    const initialModelProviderParam = searchParams.get('mp');
+    const initialModelProvider: ModelProvider =
+        initialModelProviderParam === 'claude' || initialModelProviderParam === 'gemini'
+            ? initialModelProviderParam
+            : 'openai';
 
     const [query, setQuery] = useState('');
     const [hasSearched, setHasSearched] = useState(false);
@@ -36,6 +43,7 @@ export default function ChatPage() {
     const [messages, setMessages] = useState<Message[]>([]);
     const [guestMessageCount, setGuestMessageCount] = useState(0);
     const [showAuthModal, setShowAuthModal] = useState(false);
+    const [modelProvider, setModelProvider] = useState<ModelProvider>(initialModelProvider);
 
     const bottomRef = useRef<HTMLDivElement>(null);
     const initialQueryProcessedRef = useRef(false);
@@ -88,7 +96,7 @@ export default function ChatPage() {
             const response = await fetch('http://localhost:3001/api/chat', {
                 method: 'POST',
                 headers,
-                body: JSON.stringify({ query: userQuery, conversationId }),
+                body: JSON.stringify({ query: userQuery, conversationId, modelProvider }),
             });
 
             if (!response.ok) throw new Error('Network response was not ok');
@@ -316,6 +324,8 @@ export default function ChatPage() {
                                     onSubmit={handleSubmit}
                                     isLoading={isLoading}
                                     hasSearched={false}
+                                    modelProvider={modelProvider}
+                                    setModelProvider={setModelProvider}
                                 />
                                 {!isSignedIn && (
                                     <p className="text-slate-400 text-sm mt-4">
@@ -406,6 +416,8 @@ export default function ChatPage() {
                                                 onSubmit={handleSubmit}
                                                 isLoading={isLoading}
                                                 hasSearched={true}
+                                                modelProvider={modelProvider}
+                                                setModelProvider={setModelProvider}
                                             />
                                             {!isSignedIn && guestMessageCount > 0 && (
                                                 <p className="text-center text-slate-400 text-sm mt-2">

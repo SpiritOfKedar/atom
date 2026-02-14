@@ -92,6 +92,7 @@ export default function LandingPage() {
     const { isSignedIn } = useAuth();
     const { user } = useUser();
     const [searchQuery, setSearchQuery] = useState('');
+    const [modelProvider, setModelProvider] = useState<'openai' | 'claude' | 'gemini'>('openai');
     const [activeCategory, setActiveCategory] = useState('All');
 
     const filteredCards = useMemo(() => {
@@ -114,7 +115,9 @@ export default function LandingPage() {
     const handleSearch = (e: React.FormEvent) => {
         e.preventDefault();
         if (searchQuery.trim()) {
-            router.push(`/chat?q=${encodeURIComponent(searchQuery.trim())}`);
+            router.push(
+                `/chat?q=${encodeURIComponent(searchQuery.trim())}&mp=${encodeURIComponent(modelProvider)}`
+            );
         }
     };
 
@@ -204,7 +207,20 @@ export default function LandingPage() {
                 </h1>
 
                 {/* Search Input */}
-                <form onSubmit={handleSearch} className="max-w-2xl mx-auto mb-6">
+                <form onSubmit={handleSearch} className="max-w-2xl mx-auto mb-6 space-y-3">
+                    <div className="flex justify-end">
+                        <select
+                            value={modelProvider}
+                            onChange={(e) => setModelProvider(e.target.value as 'openai' | 'claude' | 'gemini')}
+                            className="h-9 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                            aria-label="Select AI model provider"
+                        >
+                            <option value="openai">OpenAI (gpt-4o-mini)</option>
+                            <option value="claude">Claude (3.5 Haiku)</option>
+                            <option value="gemini">Gemini (2.5 Flash)</option>
+                        </select>
+                    </div>
+
                     <div className="relative">
                         <input
                             type="text"

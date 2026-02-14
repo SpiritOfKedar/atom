@@ -278,8 +278,9 @@ export const scrapePage = async (url: string): Promise<ScrapedContent> => {
             .replace(/\s+/g, ' ')
             .trim();
 
-        // Use base extraction for now (will be optimized later with query context)
-        result.content = rawContent.substring(0, MAX_CONTENT_LENGTH_BASE);
+        // Keep full content — truncation is handled later by extractRelevantContent
+        // after ranking, so the ranking algorithm scores on full content.
+        result.content = rawContent;
 
         if (result.content.length > 0) {
             result.success = true;
@@ -394,10 +395,10 @@ export const extractRelevantContent = (
     }
 
     // Score each sentence
-    const scoredSentences = sentences.map(sentence => ({
+    const scoredSentences = sentences.map((sentence, idx) => ({
         sentence,
         score: scoreSentence(sentence, query),
-        originalIndex: sentences.indexOf(sentence),
+        originalIndex: idx,
     }));
 
     // Sort by score (descending), but keep track of original order

@@ -1,11 +1,11 @@
 import { Router } from 'express';
 import { handleChat, healthCheck, detailedHealthCheck } from '../controllers/chat.controller';
-import { optionalAuth } from '../middleware/auth.middleware';
+import { optionalAuth, requireAuth } from '../middleware/auth.middleware';
 
 const router = Router();
 
 router.get('/health', healthCheck);
-router.get('/health/detailed', detailedHealthCheck);
+router.get('/health/detailed', requireAuth, detailedHealthCheck);
 
 router.post('/chat', optionalAuth, handleChat);
 

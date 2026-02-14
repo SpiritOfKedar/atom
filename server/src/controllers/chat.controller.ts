@@ -11,15 +11,63 @@ import { generateFollowUpQuestions } from '../services/llm.service';
 import mongoose from 'mongoose';
 import { getRedisClient } from '../config/redis';
 import { env } from '../config/env';
-import axios from 'axios';
 
 const CONTEXT = 'ChatController';
 
 /**
  * Sends a status update to the client via SSE.
+ * Silently ignores write errors (e.g. client disconnected).
  */
 const sendStatus = (res: Response, status: string): void => {
-    res.write(JSON.stringify({ type: 'status', data: status }) + '\n');
+    try {
+        if (!res.writableEnded) {
+            res.write(JSON.stringify({ type: 'status', data: status }) + '\n');
+        }
+    } catch {
+        // ignore
+    }
+};
+
+/**
+ * Safe write helper — ignores errors from closed connections.
+ */
+const safeWrite = (res: Response, payload: Record<string, unknown>): void => {
+    try {
+        if (!res.writableEnded) {
+            res.write(JSON.stringify(payload) + '\n');
+        }
+    } catch {
+        // ignore
+    }
+};
+
+/**
+ * Maps internal errors to safe, user-facing messages.
+ * Prevents leaking stack traces, connection strings, API key details, etc.
+ */
+const sanitizeErrorForClient = (error: any): string => {
+    const message = (error?.message || '').toLowerCase();
+
+    if (message.includes('api key') || message.includes('authentication') || message.includes('unauthorized')) {
+        return 'A service authentication error occurred. Please try again later.';
+    }
+    if (message.includes('timeout') || message.includes('etimedout') || message.includes('econnreset')) {
+        return 'The request timed out. Please try again.';
+    }
+    if (message.includes('rate limit') || message.includes('429')) {
+        return 'Rate limit exceeded. Please wait a moment and try again.';
+    }
+    if (message.includes('no search results')) {
+        return 'No search results found for your query. Try rephrasing it.';
+    }
+    if (message.includes('mongo') || message.includes('redis') || message.includes('econnrefused')) {
+        return 'A database error occurred. Please try again later.';
+    }
+    if (message.includes('no llm provider')) {
+        return 'The AI service is temporarily unavailable. Please try again later.';
+    }
+
+    return 'An unexpected error occurred. Please try again.';
 };
 
 /**
@@ -29,7 +77,7 @@ const sendStatus = (res: Response, status: string): void => {
  */
 export const handleChat = async (req: Request, res: Response): Promise<void> => {
     const authReq = req as AuthenticatedRequest;
-    const { query, conversationId, searchType, answerStyle } = req.body as ExtendedChatRequest;
+    const { query, conversationId, searchType, answerStyle, modelProvider } = req.body as ExtendedChatRequest;
 
     if (!query || typeof query !== 'string' || query.trim().length === 0) {
         res.status(400).json({ error: 'Query is required and must be a non-empty string' });
@@ -37,6 +85,12 @@ export const handleChat = async (req: Request, res: Response): Promise<void> => 
     }
 
     const sanitizedQuery = query.trim().substring(0, 500);
+    const allowedProviders = ['openai', 'claude', 'gemini'] as const;
+    const effectiveModelProvider =
+        modelProvider && allowedProviders.includes(modelProvider)
+            ? modelProvider
+            : 'openai';
+
     logger.info(`Received chat request: "${sanitizedQuery.substring(0, 50)}..."`, CONTEXT);
 
     res.writeHead(200, {
@@ -46,9 +100,14 @@ export const handleChat = async (req: Request, res: Response): Promise<void> => 
         'X-Accel-Buffering': 'no',
     });
 
+    // Track client disconnection so the pipeline can abort early
+    let clientDisconnected = false;
     req.on('close', () => {
+        clientDisconnected = true;
         logger.debug('Client disconnected', CONTEXT);
     });
+
+    const isClientConnected = (): boolean => !clientDisconnected;
 
     let activeConversationId = conversationId;
     let fullAnswer = '';
@@ -65,7 +124,14 @@ export const handleChat = async (req: Request, res: Response): Promise<void> => 
 
                 if (existingConversation?.messages?.length) {
                     const messages = existingConversation.messages;
-                    conversationHistory = messages.slice(-6);
+                    // Keep last 6 messages but truncate each to avoid prompt blowup
+                    const MAX_HISTORY_MSG_LENGTH = 500;
+                    conversationHistory = messages.slice(-6).map((msg) => ({
+                        ...msg,
+                        content: msg.content.length > MAX_HISTORY_MSG_LENGTH
+                            ? msg.content.substring(0, MAX_HISTORY_MSG_LENGTH) + '…'
+                            : msg.content,
+                    }));
                 }
             } catch (historyError) {
                 logger.error('Failed to load conversation history', CONTEXT, historyError as Error);
@@ -83,17 +149,32 @@ export const handleChat = async (req: Request, res: Response): Promise<void> => 
             },
             conversationHistory,
             searchType,
-            answerStyle
+            answerStyle,
+            effectiveModelProvider,
+            authReq.userId,
+            isClientConnected
         );
+
+        // Skip post-stream work if client disconnected
+        if (clientDisconnected) {
+            logger.info('Client disconnected, skipping post-stream operations', CONTEXT);
+            res.end();
+            return;
+        }
 
         // Validate answer quality after streaming completes
         if (fullAnswer && result.ragContexts && result.ragContexts.length > 0) {
             try {
                 sendStatus(res, 'Validating answer...');
-                const validation = await validateAnswer(fullAnswer, result.ragContexts, sanitizedQuery);
+                const validation = await validateAnswer(
+                    fullAnswer,
+                    result.ragContexts,
+                    sanitizedQuery,
+                    effectiveModelProvider
+                );
 
                 // Send validation result to client
-                res.write(JSON.stringify({
+                safeWrite(res, {
                     type: 'validation',
                     data: {
                         isValid: validation.isValid,
@@ -101,7 +182,7 @@ export const handleChat = async (req: Request, res: Response): Promise<void> => 
                         issues: validation.issues,
                         summary: validation.summary,
                     }
-                }) + '\n');
+                });
 
                 logger.info(
                     `Answer validation: isValid=${validation.isValid}, ` +
@@ -121,14 +202,15 @@ export const handleChat = async (req: Request, res: Response): Promise<void> => 
                 const followUpQuestions = await generateFollowUpQuestions(
                     sanitizedQuery,
                     fullAnswer,
-                    result.ragContexts
+                    result.ragContexts,
+                    effectiveModelProvider
                 );
 
                 // Send follow-up questions to client
-                res.write(JSON.stringify({
+                safeWrite(res, {
                     type: 'followUps',
                     data: followUpQuestions
-                }) + '\n');
+                });
 
                 logger.info(`Generated ${followUpQuestions.length} follow-up questions`, CONTEXT);
             } catch (followUpError: any) {
@@ -148,7 +230,7 @@ export const handleChat = async (req: Request, res: Response): Promise<void> => 
                     });
                     activeConversationId = (newConvo._id as any).toString();
 
-                    res.write(JSON.stringify({ type: 'conversationId', data: activeConversationId }) + '\n');
+                    safeWrite(res, { type: 'conversationId', data: activeConversationId });
                 } else {
                     await conversationService.addMessageToConversation({
                         conversationId: activeConversationId,
@@ -173,11 +255,13 @@ export const handleChat = async (req: Request, res: Response): Promise<void> => 
     } catch (error: any) {
         logger.error(`Pipeline error: ${error.message}`, CONTEXT, error);
 
+        // Sanitize error message before sending to client — never expose raw internal errors
+        const clientMessage = sanitizeErrorForClient(error);
         try {
-            res.write(JSON.stringify({
+            safeWrite(res, {
                 type: 'error',
-                data: error.message || 'An unexpected error occurred'
-            }) + '\n');
+                data: clientMessage
+            });
         } catch {
         }
         res.end();
@@ -208,6 +292,8 @@ export const detailedHealthCheck = async (_req: Request, res: Response): Promise
             mongodb: 'disconnected',
             redis: 'not_configured',
             openai: 'not_configured',
+            claude: 'not_configured',
+            gemini: 'not_configured',
             serper: 'not_configured',
         }
     };
@@ -236,6 +322,16 @@ export const detailedHealthCheck = async (_req: Request, res: Response): Promise
     // Check OpenAI Config
     if (env.openaiApiKey) {
         healthData.dependencies.openai = 'configured';
+    }
+
+    // Check Claude/Anthropic Config
+    if (env.anthropicApiKey) {
+        healthData.dependencies.claude = 'configured';
+    }
+
+    // Check Gemini Config
+    if (env.geminiApiKey) {
+        healthData.dependencies.gemini = 'configured';
     }
 
     // Check Serper Config

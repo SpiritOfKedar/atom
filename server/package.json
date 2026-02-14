@@ -13,7 +13,9 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
     "@clerk/backend": "^2.29.4",
+    "@google/generative-ai": "^0.24.1",
     "@langchain/community": "^1.1.7",
     "@langchain/core": "^1.1.17",
     "@langchain/mongodb": "^1.1.0",
@@ -26,6 +28,7 @@
     "dotenv": "^17.2.3",
     "express": "^5.2.1",
     "express-rate-limit": "^8.2.1",
+    "ioredis": "^5.9.0",
     "langchain": "^1.2.13",
     "mongodb": "^7.0.0",
     "mongoose": "^9.1.5",

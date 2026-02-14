@@ -1,23 +1,44 @@
 import { MongoDBAtlasVectorSearch } from '@langchain/mongodb';
 import { OpenAIEmbeddings } from '@langchain/openai';
-import { Memory, IMemory } from '../models/memory.model';
 import mongoose from 'mongoose';
 import { logger } from '../utils/logger';
+import { env } from '../config/env';
 
 const CONTEXT = 'VectorStoreService';
 
 let vectorStore: MongoDBAtlasVectorSearch | null = null;
+let embeddingsDisabled = false;
 
-const getVectorStore = (): MongoDBAtlasVectorSearch => {
+const isAuthError = (error: unknown): boolean => {
+    const message = (error as any)?.message || '';
+    const status = (error as any)?.status || (error as any)?.response?.status;
+    return status === 401 || /Incorrect API key|MODEL_AUTHENTICATION|authentication/i.test(String(message));
+};
+
+const getVectorStore = (): MongoDBAtlasVectorSearch | null => {
     if (vectorStore) return vectorStore;
 
-    // Use the native MongoDB driver collection from Mongoose
-    const collection = mongoose.connection.collection('memories');
+    if (embeddingsDisabled) {
+        return null;
+    }
+
+    if (!env.openaiApiKey) {
+        logger.warn('OPENAI_API_KEY is not configured, memory vector search is disabled', CONTEXT);
+        return null;
+    }
+
+    if (mongoose.connection.readyState !== 1 || !mongoose.connection.db) {
+        logger.warn('MongoDB is not ready, memory vector search is temporarily unavailable', CONTEXT);
+        return null;
+    }
+
+    // Use the native MongoDB driver collection from Mongoose connection DB
+    const collection = mongoose.connection.db.collection('memories');
 
     vectorStore = new MongoDBAtlasVectorSearch(
         new OpenAIEmbeddings({
             modelName: 'text-embedding-3-small',
-            apiKey: process.env.OPENAI_API_KEY,
+            apiKey: env.openaiApiKey,
         }),
         {
             collection: collection as any,
@@ -41,6 +62,9 @@ export const storeMemory = async (
     logger.info(`Storing memory for user ${userId}`, CONTEXT);
 
     const store = getVectorStore();
+    if (!store) {
+        return;
+    }
 
     // metadata must include userId for filtering
     const docMetadata = {
@@ -57,10 +81,33 @@ export const storeMemory = async (
             },
         ]);
     } catch (error: any) {
+        if (isAuthError(error)) {
+            embeddingsDisabled = true;
+            logger.warn(
+                'Disabling memory embeddings due to authentication failure (check OPENAI_API_KEY)',
+                CONTEXT
+            );
+            return;
+        }
         logger.error(`Failed to store memory: ${error.message}`, CONTEXT, error);
         throw error;
     }
 };
+
+/**
+ * Represents a memory result from vector search.
+ * This is the simplified shape consumed by the RAG pipeline.
+ */
+export interface MemoryResult {
+    content: string;
+    metadata?: {
+        userId?: string;
+        date?: Date | string;
+        tags?: string[];
+        sourceUrl?: string;
+        [key: string]: unknown;
+    };
+}
 
 /**
  * Searches for relevant memories using vector similarity.
@@ -69,17 +116,14 @@ export const searchMemory = async (
     userId: string,
     query: string,
     limit: number = 3
-): Promise<IMemory[]> => {
+): Promise<MemoryResult[]> => {
     logger.debug(`Searching memory for: "${query}"`, CONTEXT);
 
     try {
         const store = getVectorStore();
-
-        // Perform similarity search
-        // Note: LangChain's similaritySearch allows a filter only if using specific vector stores.
-        // For MongoDBAtlasVectorSearch, we can pass a pre-filter stage.
-        // However, the standard similaritySearch method signature is (query, k, filter).
-        // The filter for MongoDB Atlas is an MQL match object.
+        if (!store) {
+            return [];
+        }
 
         const results = await store.similaritySearch(query, limit, {
             preFilter: {
@@ -87,14 +131,21 @@ export const searchMemory = async (
             }
         });
 
-        // Map back to IMemory application interface
+        // Map LangChain Document → our MemoryResult shape
         return results.map(doc => ({
             content: doc.pageContent,
-            metadata: doc.metadata,
-            // We don't get the raw embedding or ID back easily from this simplified call, but we have the content
-        } as unknown as IMemory));
+            metadata: doc.metadata as MemoryResult['metadata'],
+        }));
 
     } catch (error: any) {
+        if (isAuthError(error)) {
+            embeddingsDisabled = true;
+            logger.warn(
+                'Disabling memory embeddings due to authentication failure (check OPENAI_API_KEY)',
+                CONTEXT
+            );
+            return [];
+        }
         logger.error(`Vector search failed: ${error.message}`, CONTEXT, error);
         return [];
     }

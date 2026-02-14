@@ -51,7 +51,11 @@ const calculateRelevanceScore = (
     query: string
 ): number => {
     const queryLower = query.toLowerCase();
-    const queryWords = queryLower.split(/\s+/).filter(w => w.length > 2);
+    const primaryWords = queryLower.split(/\s+/).filter(w => w.length > 2);
+    const queryWords = primaryWords.length > 0
+        ? primaryWords
+        : queryLower.split(/\s+/).filter(w => w.length > 0);
+    const denominator = Math.max(queryWords.length, 1);
     
     const contentLower = content.toLowerCase();
     const titleLower = title.toLowerCase();
@@ -61,15 +65,15 @@ const calculateRelevanceScore = (
     
     // Title matches are most important
     const titleMatches = queryWords.filter(word => titleLower.includes(word)).length;
-    score += (titleMatches / queryWords.length) * 40;
+    score += (titleMatches / denominator) * 40;
     
     // Snippet matches
     const snippetMatches = queryWords.filter(word => snippetLower.includes(word)).length;
-    score += (snippetMatches / queryWords.length) * 30;
+    score += (snippetMatches / denominator) * 30;
     
     // Content matches (keyword density)
     const contentMatches = queryWords.filter(word => contentLower.includes(word)).length;
-    score += (contentMatches / queryWords.length) * 20;
+    score += (contentMatches / denominator) * 20;
     
     // Exact phrase match bonus
     if (contentLower.includes(queryLower) || titleLower.includes(queryLower)) {
@@ -129,7 +133,8 @@ const calculateFreshnessScore = (url: string, content: string): number => {
         }
         
         // Recent keywords in content
-        const recentKeywords = ['recent', 'latest', 'new', 'updated', '2024', '2025', 'this year', 'this month'];
+        const currentYear = new Date().getFullYear();
+        const recentKeywords = ['recent', 'latest', 'new', 'updated', String(currentYear), String(currentYear - 1), 'this year', 'this month'];
         const hasRecentKeywords = recentKeywords.some(keyword => 
             content.toLowerCase().includes(keyword)
         );

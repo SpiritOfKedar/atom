@@ -1,13 +1,8 @@
-import OpenAI from 'openai';
-import { env } from '../config/env';
 import { logger } from '../utils/logger';
-import { RAGContext } from '../types';
+import { ModelProvider, RAGContext } from '../types';
+import { completeText } from './llm.service';
 
 const CONTEXT = 'AnswerValidationService';
-
-const openai = new OpenAI({
-    apiKey: env.openaiApiKey,
-});
 
 /**
  * Result of answer validation against sources.
@@ -35,7 +30,8 @@ export interface ValidationResult {
 export const validateAnswer = async (
     answer: string,
     sources: RAGContext[],
-    query: string
+    query: string,
+    provider: ModelProvider = 'openai'
 ): Promise<ValidationResult> => {
     logger.info(`Validating answer for query: "${query.substring(0, 50)}..."`, CONTEXT);
 
@@ -72,28 +68,25 @@ Focus on:
 
 Return ONLY valid JSON, no other text.`;
 
-        const response = await openai.chat.completions.create({
-            model: 'gpt-4o-mini',
-            messages: [
-                {
-                    role: 'system',
-                    content: 'You are an answer validation expert. Return only valid JSON, no explanations.',
-                },
-                {
-                    role: 'user',
-                    content: validationPrompt,
-                },
-            ],
+        const response = await completeText({
+            provider,
+            systemPrompt: 'You are an answer validation expert. Return only valid JSON, no explanations.',
+            userPrompt: validationPrompt,
             temperature: 0.2,
-            max_tokens: 500,
-            response_format: { type: 'json_object' },
+            maxTokens: 500,
         });
 
-        const responseText = response.choices[0]?.message?.content || '{}';
+        const responseText = response.text || '{}';
         let validationResult: ValidationResult;
 
         try {
-            const parsed = JSON.parse(responseText);
+            // Strip markdown code fences if present (LLMs often wrap JSON in ```json...```)
+            const cleanedText = responseText
+                .replace(/^```(?:json)?\s*/i, '')
+                .replace(/\s*```\s*$/i, '')
+                .trim();
+
+            const parsed = JSON.parse(cleanedText);
             validationResult = {
                 isValid: parsed.isValid ?? true,
                 confidence: Math.max(0, Math.min(1, parsed.confidence ?? 0.5)),
@@ -131,14 +124,14 @@ Return ONLY valid JSON, no other text.`;
     } catch (error: any) {
         logger.error(`Answer validation failed: ${error.message}`, CONTEXT, error);
         
-        // Return a neutral validation result on error
+        // Return a neutral validation result on error — do not expose internal error details
         return {
             isValid: true, // Assume valid on error to not block answers
             confidence: 0.5,
-            issues: [`Validation error: ${error.message}`],
+            issues: [],
             supportedClaims: 0,
             totalClaims: 0,
-            summary: 'Validation could not be completed due to an error',
+            summary: 'Validation could not be completed',
         };
     }
 };

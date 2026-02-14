@@ -1,50 +1,9 @@
-import OpenAI from 'openai';
-import crypto from 'crypto';
-import { env } from '../config/env';
 import { logger } from '../utils/logger';
 import { getCachedOptimizedQuery, cacheOptimizedQuery } from './cache.service';
-import { SearchType } from '../types';
+import { ModelProvider, SearchType } from '../types';
+import { completeText } from './llm.service';
 
 const CONTEXT = 'QueryOptimizationService';
-
-const openai = new OpenAI({
-    apiKey: env.openaiApiKey,
-});
-
-/**
- * Cache entry for optimized queries.
- */
-interface CacheEntry {
-    optimizedQuery: string;
-    timestamp: number;
-}
-
-/**
- * In-memory cache for optimized queries.
- * Key: hash of original query, Value: cache entry
- * TTL: 24 hours (86400000 ms)
- */
-const queryCache = new Map<string, CacheEntry>();
-const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
-
-/**
- * Generates a hash of the query for cache key.
- */
-const hashQuery = (query: string): string => {
-    return crypto.createHash('sha256').update(query.toLowerCase().trim()).digest('hex');
-};
-
-/**
- * Cleans up expired cache entries.
- */
-const cleanupCache = (): void => {
-    const now = Date.now();
-    for (const [key, entry] of queryCache.entries()) {
-        if (now - entry.timestamp > CACHE_TTL_MS) {
-            queryCache.delete(key);
-        }
-    }
-};
 
 /**
  * Optimizes a search query using LLM to improve search results.
@@ -58,38 +17,21 @@ const cleanupCache = (): void => {
  * @param query - Original user query
  * @returns Optimized query string
  */
-export const optimizeQuery = async (query: string): Promise<string> => {
+export const optimizeQuery = async (
+    query: string,
+    provider: ModelProvider = 'openai'
+): Promise<string> => {
     if (!query || query.trim().length === 0) {
         return query;
     }
 
     const trimmedQuery = query.trim();
     
-    // Check Redis/memory cache first
+    // Check cache first (Redis with in-memory fallback)
     const cachedOptimized = await getCachedOptimizedQuery(trimmedQuery);
     if (cachedOptimized) {
-        logger.debug(`Cache hit (service) for query: "${trimmedQuery.substring(0, 50)}..."`, CONTEXT);
+        logger.debug(`Cache hit for query: "${trimmedQuery.substring(0, 50)}..."`, CONTEXT);
         return cachedOptimized;
-    }
-    
-    // Check in-memory cache (legacy, for backward compatibility)
-    const cacheKey = hashQuery(trimmedQuery);
-    const cached = queryCache.get(cacheKey);
-    
-    if (cached) {
-        const age = Date.now() - cached.timestamp;
-        if (age < CACHE_TTL_MS) {
-            logger.debug(`Cache hit (memory) for query: "${trimmedQuery.substring(0, 50)}..."`, CONTEXT);
-            return cached.optimizedQuery;
-        } else {
-            // Expired, remove from cache
-            queryCache.delete(cacheKey);
-        }
-    }
-
-    // Cleanup old entries periodically (every 100 queries)
-    if (queryCache.size > 0 && queryCache.size % 100 === 0) {
-        cleanupCache();
     }
 
     logger.info(`Optimizing query: "${trimmedQuery.substring(0, 50)}..."`, CONTEXT);
@@ -115,23 +57,15 @@ Original query: "${trimmedQuery}"
 
 Improved query:`;
 
-        const response = await openai.chat.completions.create({
-            model: 'gpt-4o-mini',
-            messages: [
-                {
-                    role: 'system',
-                    content: 'You are a search query optimization expert. Return only the improved query, no explanations.',
-                },
-                {
-                    role: 'user',
-                    content: optimizationPrompt,
-                },
-            ],
+        const response = await completeText({
+            provider,
+            systemPrompt: 'You are a search query optimization expert. Return only the improved query, no explanations.',
+            userPrompt: optimizationPrompt,
             temperature: 0.3,
-            max_tokens: 100,
+            maxTokens: 100,
         });
 
-        const optimizedQuery = response.choices[0]?.message?.content?.trim() || trimmedQuery;
+        const optimizedQuery = response.text || trimmedQuery;
 
         // Validate: if LLM returned something very different or suspicious, use original
         if (optimizedQuery.length < trimmedQuery.length * 0.3 || optimizedQuery.length > trimmedQuery.length * 3) {
@@ -142,12 +76,8 @@ Improved query:`;
             return trimmedQuery;
         }
 
-        // Cache the result in both Redis/memory cache and in-memory cache
+        // Cache the result
         await cacheOptimizedQuery(trimmedQuery, optimizedQuery);
-        queryCache.set(cacheKey, {
-            optimizedQuery,
-            timestamp: Date.now(),
-        });
 
         logger.info(
             `Query optimized: "${trimmedQuery.substring(0, 40)}..." -> "${optimizedQuery.substring(0, 40)}..."`,
@@ -167,7 +97,7 @@ Improved query:`;
  * Optimizes multiple queries in parallel (for future use).
  */
 export const optimizeQueries = async (queries: string[]): Promise<string[]> => {
-    return Promise.all(queries.map(optimizeQuery));
+    return Promise.all(queries.map((query) => optimizeQuery(query)));
 };
 
 /**
@@ -178,9 +108,10 @@ export const suggestSearchType = (query: string): SearchType => {
     const queryLower = query.toLowerCase();
     
     // News-related keywords
+    const currentYear = new Date().getFullYear();
     const newsKeywords = [
         'news', 'latest', 'recent', 'breaking', 'update', 'announcement',
-        'today', 'yesterday', 'this week', 'this month', '2024', '2025',
+        'today', 'yesterday', 'this week', 'this month', String(currentYear), String(currentYear - 1),
         'happened', 'occurred', 'reported', 'published'
     ];
     
@@ -201,33 +132,4 @@ export const suggestSearchType = (query: string): SearchType => {
     }
     
     return 'web'; // Default
-};
-
-/**
- * Clears the query optimization cache (useful for testing).
- */
-export const clearCache = (): void => {
-    queryCache.clear();
-    logger.info('Query optimization cache cleared', CONTEXT);
-};
-
-/**
- * Gets cache statistics (useful for monitoring).
- */
-export const getCacheStats = (): { size: number; maxAge: number } => {
-    cleanupCache();
-    const now = Date.now();
-    let maxAge = 0;
-    
-    for (const entry of queryCache.values()) {
-        const age = now - entry.timestamp;
-        if (age > maxAge) {
-            maxAge = age;
-        }
-    }
-    
-    return {
-        size: queryCache.size,
-        maxAge,
-    };
 };

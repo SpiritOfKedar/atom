@@ -27,24 +27,33 @@ const processor = async (job: Job) => {
 
 let worker: Worker | null = null;
 
-export const initScraperWorker = () => {
+export const initScraperWorker = (): Worker | null => {
     if (worker) return worker;
 
-    const connection = getQueueConnection();
+    try {
+        const connection = getQueueConnection();
 
-    worker = new Worker(QUEUE_NAME, processor, {
-        connection,
-        concurrency: 5, // Process up to 5 jobs concurrently
-    });
+        worker = new Worker(QUEUE_NAME, processor, {
+            connection,
+            concurrency: 5,
+        });
 
-    worker.on('completed', (job) => {
-        logger.debug(`Job ${job.id} completed`, CONTEXT);
-    });
+        worker.on('completed', (job) => {
+            logger.debug(`Job ${job.id} completed`, CONTEXT);
+        });
 
-    worker.on('failed', (job, err) => {
-        logger.error(`Job ${job?.id} failed: ${err.message}`, CONTEXT);
-    });
+        worker.on('failed', (job, err) => {
+            logger.error(`Job ${job?.id} failed: ${err.message}`, CONTEXT);
+        });
 
-    logger.info('Scraper worker initialized', CONTEXT);
-    return worker;
+        worker.on('error', (err) => {
+            logger.error(`Worker error: ${err.message}`, CONTEXT);
+        });
+
+        logger.info('Scraper worker initialized', CONTEXT);
+        return worker;
+    } catch (err: any) {
+        logger.warn(`Scraper worker init failed: ${err.message} — scraping will use direct fallback`, CONTEXT);
+        return null;
+    }
 };
