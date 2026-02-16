@@ -1,77 +1,85 @@
 'use client';
 
-import React, { useState } from 'react';
-import { Clock, MoreHorizontal, Heart, Share2 } from "lucide-react";
+import React from 'react';
+import { ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface DiscoverHeroProps {
     title: string;
     description: string;
     imageUrl: string;
-    sourceCount: number;
+    source: string;
+    sourceIcon: string;
     timeAgo: string;
-    category: string;
+    onClick?: () => void;
 }
 
 export function DiscoverHero({
     title,
     description,
     imageUrl,
-    sourceCount,
+    source,
+    sourceIcon,
     timeAgo,
-    category
+    onClick,
 }: DiscoverHeroProps) {
     return (
-        <div className="group relative w-full rounded-2xl overflow-hidden bg-slate-900/50 border border-slate-800/50 hover:border-slate-700 transition-all duration-300 cursor-pointer">
-            <div className="flex flex-col md:flex-row">
-                <div className="flex-1 p-6 md:p-8 flex flex-col justify-between relative z-10">
-                    <div>
-                        <div className="flex items-center gap-2 mb-4">
-                            <div className="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
-                                <span className="text-[10px] font-bold">P</span>
-                            </div>
-                            <span className="text-xs font-medium text-slate-400">Published {timeAgo}</span>
-                        </div>
+        <div
+            onClick={onClick}
+            className="group relative w-full h-[420px] rounded-2xl overflow-hidden cursor-pointer"
+        >
+            {/* Full-bleed background image */}
+            {imageUrl && (
+                <img
+                    src={imageUrl}
+                    alt={title}
+                    className="absolute inset-0 w-full h-full object-cover transition-transform duration-[1200ms] group-hover:scale-105"
+                    onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                />
+            )}
 
-                        <h2 className="text-2xl md:text-3xl font-serif font-medium text-slate-100 mb-3 leading-tight group-hover:text-emerald-400 transition-colors">
-                            {title}
-                        </h2>
+            {/* Gradient overlays */}
+            <div className="absolute inset-0 bg-gradient-to-t from-black via-black/50 to-transparent" />
+            <div className="absolute inset-0 bg-gradient-to-r from-black/40 to-transparent" />
 
-                        <p className="text-slate-400 line-clamp-3 md:line-clamp-4 leading-relaxed mb-6">
+            {/* Top badge */}
+            <div className="absolute top-5 left-5 z-10">
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/20 backdrop-blur-md border border-emerald-500/30">
+                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    <span className="text-[11px] font-semibold text-emerald-300 uppercase tracking-wider">Top Story</span>
+                </div>
+            </div>
+
+            {/* Content at bottom */}
+            <div className="absolute bottom-0 left-0 right-0 p-6 md:p-8 z-10">
+                <div className="max-w-2xl">
+                    {/* Source info */}
+                    <div className="flex items-center gap-2 mb-3">
+                        {sourceIcon && (
+                            <img src={sourceIcon} alt="" className="w-4 h-4 rounded-full ring-1 ring-white/20" />
+                        )}
+                        <span className="text-xs font-medium text-white/80">{source}</span>
+                        <span className="text-white/30">·</span>
+                        <span className="text-xs text-white/50">{timeAgo}</span>
+                    </div>
+
+                    {/* Title */}
+                    <h2 className="text-2xl md:text-4xl font-bold text-white mb-3 leading-tight tracking-tight">
+                        {title}
+                    </h2>
+
+                    {/* Description */}
+                    {description && (
+                        <p className="text-white/60 line-clamp-2 text-sm md:text-base leading-relaxed mb-4 max-w-xl">
                             {description}
                         </p>
+                    )}
+
+                    {/* CTA */}
+                    <div className="flex items-center gap-2 text-emerald-400 text-sm font-medium opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-300">
+                        <span>Explore with Atom</span>
+                        <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
                     </div>
-
-                    <div className="flex items-center justify-between mt-auto">
-                        <div className="flex items-center gap-2">
-                            <div className="flex -space-x-2">
-                                {[1, 2, 3].map((_, i) => (
-                                    <div key={i} className="w-5 h-5 rounded-full bg-slate-800 border-2 border-slate-900 ring-2 ring-slate-900 flex items-center justify-center text-[8px] text-slate-300">
-                                        <div className="w-2 h-2 rounded-full bg-emerald-500/50" />
-                                    </div>
-                                ))}
-                            </div>
-                            <span className="text-xs font-medium text-slate-500">{sourceCount} sources</span>
-                        </div>
-
-                        <div className="flex items-center gap-1">
-                            <button className="p-2 rounded-full hover:bg-slate-800 text-slate-500 hover:text-red-400 transition-colors">
-                                <Heart className="w-4 h-4" />
-                            </button>
-                            <button className="p-2 rounded-full hover:bg-slate-800 text-slate-500 hover:text-white transition-colors">
-                                <MoreHorizontal className="w-4 h-4" />
-                            </button>
-                        </div>
-                    </div>
-                </div>
-
-                <div className="w-full md:w-[45%] h-64 md:h-auto relative">
-                    <div className="absolute inset-0 bg-gradient-to-l from-transparent via-slate-900/50 to-slate-900" />
-                    <img
-                        src={imageUrl}
-                        alt={title}
-                        className="w-full h-full object-cover"
-                    />
                 </div>
             </div>
         </div>

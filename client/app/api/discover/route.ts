@@ -1,105 +1,155 @@
-
 import { NextResponse } from 'next/server';
 
-export async function GET(request: Request) {
-    const apiKey = process.env.NEWSDATA_API_KEY;
+const SERPER_API_URL = 'https://google.serper.dev/news';
 
-    if (apiKey) {
-        try {
-            // Fetch latest news from newsdata.io
-            // language=en, country=us (or others), category=technology,science,business
-            const res = await fetch(`https://newsdata.io/api/1/latest?apikey=${apiKey}&language=en&category=technology,science,business`, {
-                next: { revalidate: 3600 } // Cache for 1 hour
-            });
+const TOPIC_QUERIES: Record<string, string> = {
+    'Top': 'breaking news today',
+    'Tech & Science': 'technology science news today',
+    'Finance': 'stock market finance business news today',
+    'Arts & Culture': 'arts culture entertainment news today',
+    'Sports': 'sports news today',
+    'World': 'world news today',
+    'Politics': 'politics government news today',
+    'Health': 'health medical news today',
+};
 
-            if (res.ok) {
-                const json = await res.json();
-                if (json.results && json.results.length > 0) {
-                    // Transform data to our format
-                    const items = json.results.map((article: any) => ({
-                        title: article.title,
-                        description: article.description,
-                        imageUrl: article.image_url || null, // Some might be null
-                        sourceCount: Math.floor(Math.random() * 50) + 10, // Mock source count as API doesn't provide it
-                        timeAgo: calculateTimeAgo(article.pubDate),
-                        category: article.category ? article.category[0] : 'General',
-                        link: article.link // Original link
-                    }));
-
-                    // Pick the first item with an image as hero, or just the first item
-                    let heroIndex = items.findIndex((item: any) => item.imageUrl);
-                    if (heroIndex === -1) heroIndex = 0;
-
-                    const hero = items[heroIndex];
-                    // Remove hero from list
-                    const listItems = items.filter((_: any, index: number) => index !== heroIndex);
-
-                    return NextResponse.json({
-                        hero: {
-                            ...hero,
-                            // Ensure hero has an image if possible, or fallback
-                            imageUrl: hero.imageUrl || "https://images.unsplash.com/photo-1504711434969-e33886168f5c?q=80&w=2000"
-                        },
-                        items: listItems
-                    });
-                }
-            } else {
-                console.error("Newsdata API failed:", res.status, await res.text());
-            }
-        } catch (error) {
-            console.error("Failed to fetch from Newsdata:", error);
-        }
-    }
-
-    // Fallback to mock data if API fails or no key
-    console.log("Using fallback mock data for Discover");
-
-    await new Promise(resolve => setTimeout(resolve, 800)); // Simulate delay
-
-    const data = {
-        hero: {
-            title: "Reliance launches Jio Electric Cycle with 180 km range",
-            description: "The cycle targets urban commuters with EMIs starting at Rs 999, marking Reliance's entry into India's growing electric mobility market.",
-            imageUrl: "https://images.unsplash.com/photo-1571181520846-953e53df4e71?q=80&w=2000&auto=format&fit=crop",
-            sourceCount: 66,
-            timeAgo: "10 hours ago",
-            category: "Technology"
-        },
-        items: [
-            {
-                title: "India's 2026 budget faces calls for tariff relief, tax cuts",
-                imageUrl: "https://images.unsplash.com/photo-1526304640155-246e08b493fe?q=80&w=1000&auto=format&fit=crop",
-                sourceCount: 52,
-            },
-            {
-                title: "Iran crackdown death toll may exceed 36,000, leaked documents show",
-                imageUrl: "https://images.unsplash.com/photo-1543165365-07232fe12224?q=80&w=1000&auto=format&fit=crop",
-                sourceCount: 40,
-            },
-            {
-                title: "SpaceX Starship successfully reaches orbit in fourth flight test",
-                imageUrl: "https://images.unsplash.com/photo-1517976487492-5750f3195933?q=80&w=1000&auto=format&fit=crop",
-                sourceCount: 128,
-            },
-            {
-                title: "Apple announces major AI features in iOS 18 update",
-                imageUrl: "https://images.unsplash.com/photo-1611186871348-b1ce696e52c9?q=80&w=1000&auto=format&fit=crop",
-                sourceCount: 89,
-            }
-        ]
-    };
-
-    return NextResponse.json(data);
+interface SerperNewsResult {
+    title: string;
+    link: string;
+    snippet: string;
+    date?: string;
+    source: string;
+    imageUrl?: string;
 }
 
-function calculateTimeAgo(dateString: string) {
-    if (!dateString) return 'Recently';
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+interface SerperNewsResponse {
+    news: SerperNewsResult[];
+}
 
-    if (diffInSeconds < 60) return 'Just now';
-    if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)} min ago`;
-    if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)} h ago`;
-    return `${Math.floor(diffInSeconds / 86400)} days ago`;
+/**
+ * Fetches the og:image from an article URL.
+ * Returns null on any failure (timeout, parse error, missing tag).
+ */
+async function fetchOgImage(url: string): Promise<string | null> {
+    try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 3000);
+
+        const res = await fetch(url, {
+            signal: controller.signal,
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (compatible; Atom/1.0)',
+            },
+        });
+        clearTimeout(timeout);
+
+        if (!res.ok) return null;
+
+        // Only read the first 20KB — og:image is always in <head>
+        const reader = res.body?.getReader();
+        if (!reader) return null;
+
+        let html = '';
+        const decoder = new TextDecoder();
+        while (html.length < 20000) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            html += decoder.decode(value, { stream: true });
+        }
+        reader.cancel();
+
+        // Match og:image meta tag
+        const match = html.match(
+            /<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i
+        ) || html.match(
+            /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i
+        );
+
+        return match?.[1] || null;
+    } catch {
+        return null;
+    }
+}
+
+export async function GET(request: Request) {
+    const { searchParams } = new URL(request.url);
+    const tab = searchParams.get('tab') || 'Top';
+    const topic = searchParams.get('topic') || '';
+
+    const apiKey = process.env.SERPER_API_KEY;
+
+    if (!apiKey) {
+        return NextResponse.json({ error: 'SERPER_API_KEY not configured' }, { status: 500 });
+    }
+
+    try {
+        const query = topic
+            ? TOPIC_QUERIES[topic] || `${topic} news today`
+            : TOPIC_QUERIES[tab] || 'trending news today';
+
+        const res = await fetch(SERPER_API_URL, {
+            method: 'POST',
+            headers: {
+                'X-API-KEY': apiKey,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                q: query,
+                num: 12,
+                gl: 'us',
+                hl: 'en',
+            }),
+        });
+
+        if (!res.ok) {
+            console.error('Serper news API failed:', res.status);
+            return NextResponse.json({ error: 'Failed to fetch news' }, { status: 502 });
+        }
+
+        const json: SerperNewsResponse = await res.json();
+
+        if (!json.news || json.news.length === 0) {
+            return NextResponse.json({ hero: null, items: [] });
+        }
+
+        // Fetch OG images in parallel for all articles
+        const ogImages = await Promise.all(
+            json.news.map((article) => fetchOgImage(article.link))
+        );
+
+        const items = json.news.map((article, i) => ({
+            title: article.title,
+            description: article.snippet || '',
+            imageUrl: ogImages[i] || article.imageUrl || null,
+            source: article.source,
+            sourceIcon: getFaviconUrl(article.link),
+            timeAgo: article.date || 'Recently',
+            link: article.link,
+            category: topic || tab,
+        }));
+
+        // Hero = first item with an image
+        let heroIndex = items.findIndex((item) => item.imageUrl);
+        if (heroIndex === -1) heroIndex = 0;
+
+        const hero = items[heroIndex];
+        const listItems = items.filter((_, i) => i !== heroIndex);
+
+        return NextResponse.json({
+            hero,
+            items: listItems,
+        });
+    } catch (error) {
+        console.error('Discover API error:', error);
+        return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    }
+}
+
+function getFaviconUrl(link: string): string {
+    try {
+        const url = new URL(link);
+        return `https://www.google.com/s2/favicons?domain=${url.hostname}&sz=32`;
+    } catch {
+        return '';
+    }
 }

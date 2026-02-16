@@ -169,10 +169,23 @@ export default function ChatPage() {
                             setConversationId(parsed.data);
                         } else if (parsed.type === 'error') {
                             console.error("Backend error:", parsed.data);
-                            setMessages(prev => [
-                                ...prev,
-                                { role: 'assistant', content: `Error: ${parsed.data}`, createdAt: new Date().toISOString() }
-                            ]);
+                            const errorContent = `Error: ${parsed.data}`;
+                            currentAssistantContent = errorContent;
+                            setMessages(prev => {
+                                const last = prev[prev.length - 1];
+                                if (last && last.role === 'assistant') {
+                                    return [
+                                        ...prev.slice(0, -1),
+                                        { ...last, content: errorContent }
+                                    ];
+                                } else {
+                                    return [
+                                        ...prev,
+                                        { role: 'assistant', content: errorContent, createdAt: new Date().toISOString() }
+                                    ];
+                                }
+                            });
+                            setIsLoading(false);
                         }
                     } catch (err) {
                         console.error('Error parsing JSON line:', err);
@@ -181,10 +194,21 @@ export default function ChatPage() {
             }
         } catch (error) {
             console.error('Fetch error:', error);
-            setMessages(prev => [
-                ...prev,
-                { role: 'assistant', content: "Sorry, I encountered an error while searching.", createdAt: new Date().toISOString() }
-            ]);
+            const errorContent = "Sorry, I encountered an error while searching.";
+            setMessages(prev => {
+                const last = prev[prev.length - 1];
+                if (last && last.role === 'assistant') {
+                    return [
+                        ...prev.slice(0, -1),
+                        { ...last, content: errorContent }
+                    ];
+                } else {
+                    return [
+                        ...prev,
+                        { role: 'assistant', content: errorContent, createdAt: new Date().toISOString() }
+                    ];
+                }
+            });
         } finally {
             setIsLoading(false);
 
