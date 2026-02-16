@@ -1,90 +1,40 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth, useUser, UserButton, SignInButton, SignUpButton } from '@clerk/nextjs';
-import { HeroIllustration } from '@/components/hero-illustration';
-import { Search, ChevronRight, ChevronLeft } from 'lucide-react';
+import {
+    Search,
+    ArrowRight,
+    Globe,
+    Zap,
+    Shield,
+    Sparkles,
+    BookOpen,
+    Code,
+    TrendingUp,
+    Microscope,
+    Scale,
+    Palette,
+} from 'lucide-react';
+import { cn } from '@/lib/utils';
 
-const categories = [
-    'All',
-    'Research',
-    'Coding',
-    'Science',
-    'Technology',
-    'Academic',
-    'Business',
-    'Health',
-    'Finance',
-    'Legal',
-    'Creative',
-    'General',
+const EXAMPLE_QUERIES = [
+    'What are the latest breakthroughs in quantum computing?',
+    'Explain the economic impact of AI on global markets',
+    'How does CRISPR gene editing work?',
+    'Compare React, Vue, and Svelte for web development',
+    'What caused the 2024 market volatility?',
 ];
 
-interface CardData {
-    id: number;
-    title: string;
-    description: string;
-    category: string;
-    bgColor: string;
-}
-
-const allCards: CardData[] = [
-    // Research
-    { id: 1, title: 'Deep Research', description: 'Get comprehensive answers with cited sources', category: 'Research', bgColor: 'bg-emerald-50' },
-    { id: 2, title: 'Literature Review', description: 'Analyze academic papers and journals', category: 'Research', bgColor: 'bg-teal-50' },
-    { id: 3, title: 'Data Analysis', description: 'Extract insights from complex datasets', category: 'Research', bgColor: 'bg-cyan-50' },
-
-    // Coding
-    { id: 4, title: 'Code Assistant', description: 'Debug, explain, and write code instantly', category: 'Coding', bgColor: 'bg-blue-50' },
-    { id: 5, title: 'Code Review', description: 'Get feedback on your code quality', category: 'Coding', bgColor: 'bg-indigo-50' },
-    { id: 6, title: 'API Explorer', description: 'Understand and integrate APIs quickly', category: 'Coding', bgColor: 'bg-violet-50' },
-
-    // Science
-    { id: 7, title: 'Scientific Discovery', description: 'Explore latest research breakthroughs', category: 'Science', bgColor: 'bg-purple-50' },
-    { id: 8, title: 'Lab Companion', description: 'Get help with experiments and methods', category: 'Science', bgColor: 'bg-fuchsia-50' },
-    { id: 9, title: 'Formula Helper', description: 'Solve complex equations step by step', category: 'Science', bgColor: 'bg-pink-50' },
-
-    // Technology
-    { id: 10, title: 'Tech Trends', description: 'Stay updated on emerging technologies', category: 'Technology', bgColor: 'bg-sky-50' },
-    { id: 11, title: 'Product Reviews', description: 'Compare gadgets and software', category: 'Technology', bgColor: 'bg-cyan-50' },
-    { id: 12, title: 'Setup Guides', description: 'Step-by-step technical tutorials', category: 'Technology', bgColor: 'bg-teal-50' },
-
-    // Academic
-    { id: 13, title: 'Essay Writer', description: 'Structure and draft academic essays', category: 'Academic', bgColor: 'bg-amber-50' },
-    { id: 14, title: 'Citation Helper', description: 'Format references in any style', category: 'Academic', bgColor: 'bg-yellow-50' },
-    { id: 15, title: 'Study Notes', description: 'Summarize chapters and lectures', category: 'Academic', bgColor: 'bg-orange-50' },
-
-    // Business
-    { id: 16, title: 'Market Research', description: 'Analyze competitors and trends', category: 'Business', bgColor: 'bg-rose-50' },
-    { id: 17, title: 'Business Strategy', description: 'Get insights for decision making', category: 'Business', bgColor: 'bg-pink-50' },
-    { id: 18, title: 'Pitch Deck', description: 'Create compelling presentations', category: 'Business', bgColor: 'bg-red-50' },
-
-    // Health
-    { id: 19, title: 'Health Info', description: 'Understand medical conditions', category: 'Health', bgColor: 'bg-green-50' },
-    { id: 20, title: 'Nutrition Guide', description: 'Get diet and wellness advice', category: 'Health', bgColor: 'bg-emerald-50' },
-    { id: 21, title: 'Fitness Plans', description: 'Personalized workout suggestions', category: 'Health', bgColor: 'bg-lime-50' },
-
-    // Finance
-    { id: 22, title: 'Investment Analysis', description: 'Research stocks and markets', category: 'Finance', bgColor: 'bg-orange-50' },
-    { id: 23, title: 'Tax Helper', description: 'Navigate tax rules and filing', category: 'Finance', bgColor: 'bg-amber-50' },
-    { id: 24, title: 'Budget Planner', description: 'Manage personal finances wisely', category: 'Finance', bgColor: 'bg-yellow-50' },
-
-    // Legal
-    { id: 25, title: 'Legal Research', description: 'Find relevant cases and statutes', category: 'Legal', bgColor: 'bg-slate-100' },
-    { id: 26, title: 'Contract Review', description: 'Understand complex agreements', category: 'Legal', bgColor: 'bg-gray-100' },
-    { id: 27, title: 'Rights Guide', description: 'Know your legal rights', category: 'Legal', bgColor: 'bg-zinc-100' },
-
-    // Creative
-    { id: 28, title: 'Story Writer', description: 'Generate creative narratives', category: 'Creative', bgColor: 'bg-fuchsia-50' },
-    { id: 29, title: 'Design Ideas', description: 'Get inspiration for projects', category: 'Creative', bgColor: 'bg-purple-50' },
-    { id: 30, title: 'Content Creator', description: 'Write engaging social posts', category: 'Creative', bgColor: 'bg-violet-50' },
-
-    // General
-    { id: 31, title: 'Real-time Answers', description: 'Up-to-date information from the web', category: 'General', bgColor: 'bg-slate-50' },
-    { id: 32, title: 'Daily Digest', description: 'Curated news and updates', category: 'General', bgColor: 'bg-gray-50' },
-    { id: 33, title: 'Quick Facts', description: 'Instant answers to any question', category: 'General', bgColor: 'bg-stone-50' },
+const USE_CASES = [
+    { icon: BookOpen, label: 'Research', query: 'Research the latest findings on ' },
+    { icon: Code, label: 'Code', query: 'How to implement ' },
+    { icon: TrendingUp, label: 'Finance', query: 'Analyze the market trends for ' },
+    { icon: Microscope, label: 'Science', query: 'Explain the science behind ' },
+    { icon: Scale, label: 'Legal', query: 'What are the legal implications of ' },
+    { icon: Palette, label: 'Creative', query: 'Generate ideas for ' },
 ];
 
 export default function LandingPage() {
@@ -92,214 +42,283 @@ export default function LandingPage() {
     const { isSignedIn } = useAuth();
     const { user } = useUser();
     const [searchQuery, setSearchQuery] = useState('');
-    const [modelProvider, setModelProvider] = useState<'openai' | 'claude' | 'gemini'>('openai');
-    const [activeCategory, setActiveCategory] = useState('All');
+    const [modelProvider, setModelProvider] = useState<'openai' | 'claude' | 'gemini'>('claude');
+    const [placeholderIndex, setPlaceholderIndex] = useState(0);
+    const [displayedPlaceholder, setDisplayedPlaceholder] = useState('');
+    const [isTyping, setIsTyping] = useState(true);
 
-    const filteredCards = useMemo(() => {
-        if (activeCategory === 'All') {
-            const categoryOrder = categories.filter(c => c !== 'All');
-            const topCards: CardData[] = [];
-
-            for (const cat of categoryOrder) {
-                const card = allCards.find(c => c.category === cat);
-                if (card && topCards.length < 3) {
-                    topCards.push(card);
-                }
+    // Typewriter effect for placeholder
+    useEffect(() => {
+        const target = EXAMPLE_QUERIES[placeholderIndex];
+        if (isTyping) {
+            if (displayedPlaceholder.length < target.length) {
+                const timeout = setTimeout(() => {
+                    setDisplayedPlaceholder(target.slice(0, displayedPlaceholder.length + 1));
+                }, 30);
+                return () => clearTimeout(timeout);
+            } else {
+                const timeout = setTimeout(() => setIsTyping(false), 2000);
+                return () => clearTimeout(timeout);
             }
-            return topCards;
+        } else {
+            if (displayedPlaceholder.length > 0) {
+                const timeout = setTimeout(() => {
+                    setDisplayedPlaceholder(displayedPlaceholder.slice(0, -1));
+                }, 15);
+                return () => clearTimeout(timeout);
+            } else {
+                setPlaceholderIndex((prev) => (prev + 1) % EXAMPLE_QUERIES.length);
+                setIsTyping(true);
+            }
         }
-
-        return allCards.filter(card => card.category === activeCategory);
-    }, [activeCategory]);
+    }, [displayedPlaceholder, isTyping, placeholderIndex]);
 
     const handleSearch = (e: React.FormEvent) => {
         e.preventDefault();
         if (searchQuery.trim()) {
-            router.push(
-                `/chat?q=${encodeURIComponent(searchQuery.trim())}&mp=${encodeURIComponent(modelProvider)}`
-            );
+            router.push(`/chat?q=${encodeURIComponent(searchQuery.trim())}&mp=${encodeURIComponent(modelProvider)}`);
         }
     };
 
+    const handleUseCaseClick = (query: string) => {
+        setSearchQuery(query);
+    };
+
     return (
-        <div className="min-h-screen bg-white">
-            {/* Header */}
-            <header className="sticky top-0 z-50 bg-white border-b border-gray-100">
-                <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-                    <div className="flex items-center justify-between h-16">
-                        {/* Logo */}
-                        <Link href="/landing" className="flex items-center gap-2">
-                            <img src="/atom-logo.png" alt="Atom" className="w-8 h-8 rounded-lg" />
-                            <span className="text-xl font-semibold text-gray-900">Atom</span>
-                        </Link>
+        <div className="min-h-screen bg-[#060606] relative overflow-hidden">
+            {/* Background effects */}
+            <div className="fixed inset-0 pointer-events-none">
+                <div className="absolute top-[-20%] left-[10%] w-[600px] h-[600px] bg-emerald-500/[0.07] rounded-full blur-[120px]" />
+                <div className="absolute bottom-[-10%] right-[10%] w-[500px] h-[500px] bg-emerald-600/[0.05] rounded-full blur-[100px]" />
+                <div className="absolute top-[40%] left-[50%] -translate-x-1/2 w-[800px] h-[400px] bg-emerald-500/[0.03] rounded-full blur-[80px]" />
+                {/* Grid pattern */}
+                <div
+                    className="absolute inset-0 opacity-[0.03]"
+                    style={{
+                        backgroundImage: `linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px)`,
+                        backgroundSize: '60px 60px',
+                    }}
+                />
+            </div>
 
-                        {/* Navigation */}
-                        <nav className="hidden md:flex items-center gap-8">
-                            <Link
-                                href="/landing"
-                                className="text-sm font-medium text-gray-900 border-b-2 border-gray-900 pb-0.5"
-                            >
-                                Search
-                            </Link>
-                            <Link
-                                href="#"
-                                className="text-sm font-medium text-gray-500 hover:text-gray-900 transition-colors"
-                            >
-                                API
-                            </Link>
-                            <Link
-                                href="#"
-                                className="text-sm font-medium text-gray-500 hover:text-gray-900 transition-colors"
-                            >
-                                Company
-                            </Link>
-                            <Link
-                                href="#"
-                                className="text-sm font-medium text-gray-500 hover:text-gray-900 transition-colors"
-                            >
-                                Blog
-                            </Link>
-                        </nav>
+            {/* Nav */}
+            <header className="relative z-20 border-b border-white/[0.04]">
+                <div className="max-w-6xl mx-auto px-6 flex items-center justify-between h-16">
+                    <Link href="/landing" className="flex items-center gap-2.5">
+                        <img src="/atom-logo.png" alt="Atom" className="w-8 h-8 rounded-lg" />
+                        <span className="text-lg font-bold text-white tracking-tight">Atom</span>
+                    </Link>
 
-                        {/* Auth Buttons */}
-                        <div className="flex items-center gap-3">
-                            {isSignedIn ? (
-                                <div className="flex items-center gap-3">
-                                    <span className="text-sm text-gray-600 hidden sm:block">
-                                        {user?.firstName || user?.username || 'User'}
-                                    </span>
-                                    <UserButton
-                                        afterSignOutUrl="/landing"
-                                        appearance={{
-                                            elements: {
-                                                avatarBox: "w-8 h-8"
-                                            }
-                                        }}
-                                    />
-                                </div>
-                            ) : (
-                                <>
-                                    <SignInButton mode="modal">
-                                        <button className="text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors">
-                                            Log in
-                                        </button>
-                                    </SignInButton>
-                                    <SignUpButton mode="modal">
-                                        <button className="text-sm font-medium text-white bg-teal-600 hover:bg-teal-700 px-4 py-2 rounded-lg transition-colors">
-                                            Sign up
-                                        </button>
-                                    </SignUpButton>
-                                </>
-                            )}
-                        </div>
+                    <nav className="hidden md:flex items-center gap-8">
+                        {['Discover', 'Chat'].map((item) => (
+                            <Link
+                                key={item}
+                                href={`/${item.toLowerCase()}`}
+                                className="text-sm text-slate-400 hover:text-white transition-colors"
+                            >
+                                {item}
+                            </Link>
+                        ))}
+                    </nav>
+
+                    <div className="flex items-center gap-3">
+                        {isSignedIn ? (
+                            <div className="flex items-center gap-3">
+                                <span className="text-sm text-slate-400 hidden sm:block">
+                                    {user?.firstName || user?.username}
+                                </span>
+                                <UserButton
+                                    afterSignOutUrl="/landing"
+                                    appearance={{ elements: { avatarBox: 'w-8 h-8 ring-2 ring-emerald-500/30' } }}
+                                />
+                            </div>
+                        ) : (
+                            <>
+                                <SignInButton mode="modal">
+                                    <button className="text-sm text-slate-400 hover:text-white transition-colors">
+                                        Log in
+                                    </button>
+                                </SignInButton>
+                                <SignUpButton mode="modal">
+                                    <button className="text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-500 px-4 py-2 rounded-lg transition-colors shadow-lg shadow-emerald-500/20">
+                                        Sign up
+                                    </button>
+                                </SignUpButton>
+                            </>
+                        )}
                     </div>
                 </div>
             </header>
 
-            {/* Hero Section */}
-            <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pt-16 pb-8">
-                {/* Illustration */}
-                <HeroIllustration />
-
-                {/* Headline */}
-                <h1 className="text-4xl md:text-5xl font-light text-center text-gray-800 mb-10">
-                    AI-powered search. <span className="font-normal">With sources.</span>
-                </h1>
-
-                {/* Search Input */}
-                <form onSubmit={handleSearch} className="max-w-2xl mx-auto mb-6 space-y-3">
-                    <div className="flex justify-end">
-                        <select
-                            value={modelProvider}
-                            onChange={(e) => setModelProvider(e.target.value as 'openai' | 'claude' | 'gemini')}
-                            className="h-9 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-teal-500"
-                            aria-label="Select AI model provider"
-                        >
-                            <option value="openai">OpenAI (gpt-4o-mini)</option>
-                            <option value="claude">Claude (3.5 Haiku)</option>
-                            <option value="gemini">Gemini (2.5 Flash)</option>
-                        </select>
+            {/* Hero */}
+            <main className="relative z-10">
+                <div className="max-w-4xl mx-auto px-6 pt-24 pb-16 text-center">
+                    {/* Badge */}
+                    <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 mb-8">
+                        <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                        <span className="text-xs font-semibold text-emerald-400 uppercase tracking-wider">
+                            Real-time AI Search
+                        </span>
                     </div>
 
-                    <div className="relative">
-                        <input
-                            type="text"
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                            placeholder="Ask anything..."
-                            className="w-full px-5 py-4 pr-14 text-gray-700 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-all placeholder:text-gray-400"
-                        />
-                        <button
-                            type="submit"
-                            className="absolute right-2 top-1/2 -translate-y-1/2 p-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg transition-colors"
-                        >
-                            <Search className="w-5 h-5" />
-                        </button>
-                    </div>
-                </form>
+                    {/* Headline */}
+                    <h1 className="text-5xl md:text-7xl font-bold tracking-tight mb-6">
+                        <span className="text-white">Search smarter.</span>
+                        <br />
+                        <span className="bg-gradient-to-r from-emerald-400 via-green-400 to-emerald-300 bg-clip-text text-transparent">
+                            Know more.
+                        </span>
+                    </h1>
 
-                {/* Secondary CTA */}
-                <div className="text-center mb-16">
-                    {isSignedIn ? (
+                    <p className="text-lg md:text-xl text-slate-400 max-w-2xl mx-auto mb-12 leading-relaxed">
+                        AI-powered answers with real sources. Search the web, get cited responses,
+                        and explore any topic in depth.
+                    </p>
+
+                    {/* Search box */}
+                    <form onSubmit={handleSearch} className="max-w-2xl mx-auto mb-6">
+                        <div className="relative group">
+                            {/* Glow */}
+                            <div className="absolute -inset-1 rounded-2xl bg-gradient-to-r from-emerald-500/20 via-green-500/20 to-emerald-500/20 opacity-0 group-focus-within:opacity-100 blur-xl transition-opacity duration-500" />
+
+                            <div className="relative bg-white/[0.05] backdrop-blur-xl border border-white/[0.08] rounded-2xl overflow-hidden focus-within:border-emerald-500/40 transition-all shadow-2xl shadow-black/20">
+                                <div className="flex items-center">
+                                    <Search className="ml-5 w-5 h-5 text-slate-500 group-focus-within:text-emerald-400 transition-colors flex-shrink-0" />
+                                    <input
+                                        type="text"
+                                        value={searchQuery}
+                                        onChange={(e) => setSearchQuery(e.target.value)}
+                                        placeholder={displayedPlaceholder + '|'}
+                                        className="flex-1 px-4 py-5 bg-transparent text-white text-lg placeholder:text-slate-600 focus:outline-none"
+                                    />
+                                    <button
+                                        type="submit"
+                                        disabled={!searchQuery.trim()}
+                                        className={cn(
+                                            "mr-3 p-2.5 rounded-xl transition-all flex-shrink-0",
+                                            searchQuery.trim()
+                                                ? "bg-emerald-500 hover:bg-emerald-400 text-white shadow-lg shadow-emerald-500/30"
+                                                : "bg-white/[0.05] text-slate-600"
+                                        )}
+                                    >
+                                        <ArrowRight className="w-5 h-5" />
+                                    </button>
+                                </div>
+
+                                {/* Model selector row */}
+                                <div className="flex items-center justify-between px-5 pb-3 pt-0">
+                                    <div className="flex items-center gap-1">
+                                        {(['claude', 'openai', 'gemini'] as const).map((p) => (
+                                            <button
+                                                key={p}
+                                                type="button"
+                                                onClick={() => setModelProvider(p)}
+                                                className={cn(
+                                                    "px-3 py-1 rounded-lg text-xs font-medium transition-all",
+                                                    modelProvider === p
+                                                        ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                                                        : "text-slate-500 hover:text-slate-300 hover:bg-white/[0.04]"
+                                                )}
+                                            >
+                                                {p === 'openai' ? 'GPT-4o' : p === 'claude' ? 'Claude' : 'Gemini'}
+                                            </button>
+                                        ))}
+                                    </div>
+                                    <span className="text-[11px] text-slate-600">
+                                        Powered by {modelProvider === 'openai' ? 'OpenAI' : modelProvider === 'claude' ? 'Anthropic' : 'Google'}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    </form>
+
+                    {/* Quick links */}
+                    <div className="flex items-center justify-center gap-4 mb-20">
+                        {isSignedIn && (
+                            <Link
+                                href="/chat"
+                                className="text-sm text-slate-500 hover:text-emerald-400 transition-colors"
+                            >
+                                Your conversations →
+                            </Link>
+                        )}
                         <Link
-                            href="/chat"
-                            className="inline-flex items-center text-sm font-medium text-gray-600 hover:text-gray-900 border border-gray-200 rounded-full px-4 py-2 hover:border-gray-300 transition-all"
+                            href="/discover"
+                            className="text-sm text-slate-500 hover:text-emerald-400 transition-colors"
                         >
-                            Go to your conversations →
+                            Discover trending →
                         </Link>
-                    ) : (
-                        <SignUpButton mode="modal">
-                            <button className="inline-flex items-center text-sm font-medium text-gray-600 hover:text-gray-900 border border-gray-200 rounded-full px-4 py-2 hover:border-gray-300 transition-all">
-                                New to Atom? Sign up for suggestions
-                            </button>
-                        </SignUpButton>
-                    )}
+                    </div>
                 </div>
 
-                {/* Category Pills */}
-                <div className="relative mb-12">
-                    <div className="flex items-center gap-2 overflow-x-auto pb-2 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
-                        <button className="p-1 text-gray-400 hover:text-gray-600 transition-colors flex-shrink-0">
-                            <ChevronLeft className="w-5 h-5" />
-                        </button>
-
-                        {categories.map((category) => (
+                {/* Use case pills */}
+                <div className="max-w-4xl mx-auto px-6 mb-16">
+                    <div className="flex items-center gap-3 mb-6">
+                        <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wider">Try it for</h2>
+                        <div className="flex-1 h-px bg-white/[0.04]" />
+                    </div>
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+                        {USE_CASES.map((uc) => (
                             <button
-                                key={category}
-                                onClick={() => setActiveCategory(category)}
-                                className={`flex-shrink-0 px-4 py-2 text-sm font-medium rounded-full border transition-all ${activeCategory === category
-                                    ? 'bg-gray-900 text-white border-gray-900'
-                                    : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300 hover:text-gray-900'
-                                    }`}
+                                key={uc.label}
+                                onClick={() => handleUseCaseClick(uc.query)}
+                                className="group flex flex-col items-center gap-2.5 p-4 rounded-xl bg-white/[0.02] border border-white/[0.04] hover:border-emerald-500/20 hover:bg-emerald-500/[0.04] transition-all"
                             >
-                                {category}
+                                <div className="w-10 h-10 rounded-xl bg-white/[0.04] group-hover:bg-emerald-500/10 flex items-center justify-center transition-colors">
+                                    <uc.icon className="w-5 h-5 text-slate-500 group-hover:text-emerald-400 transition-colors" />
+                                </div>
+                                <span className="text-xs font-medium text-slate-400 group-hover:text-white transition-colors">
+                                    {uc.label}
+                                </span>
                             </button>
                         ))}
-
-                        <button className="p-1 text-gray-400 hover:text-gray-600 transition-colors flex-shrink-0">
-                            <ChevronRight className="w-5 h-5" />
-                        </button>
                     </div>
                 </div>
 
-                {/* Preview Cards */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    {filteredCards.map((card) => (
-                        <div
-                            key={card.id}
-                            className={`${card.bgColor} rounded-2xl p-6 h-48 flex flex-col justify-end hover:shadow-lg transition-shadow cursor-pointer`}
-                        >
-                            <h3 className="text-lg font-semibold text-gray-800 mb-1">
-                                {card.title}
-                            </h3>
-                            <p className="text-sm text-gray-600">{card.description}</p>
-                        </div>
-                    ))}
+                {/* Feature cards */}
+                <div className="max-w-5xl mx-auto px-6 pb-24">
+                    <div className="grid md:grid-cols-3 gap-4">
+                        {[
+                            {
+                                icon: Globe,
+                                title: 'Real-time Search',
+                                desc: 'Every answer is backed by live web sources — not stale training data.',
+                            },
+                            {
+                                icon: Sparkles,
+                                title: 'Multi-Model AI',
+                                desc: 'Switch between GPT-4o, Claude, and Gemini. Pick the best model for your question.',
+                            },
+                            {
+                                icon: Shield,
+                                title: 'Verified Answers',
+                                desc: 'Built-in hallucination detection validates every response against its sources.',
+                            },
+                        ].map((feature) => (
+                            <div
+                                key={feature.title}
+                                className="group p-6 rounded-2xl bg-white/[0.02] border border-white/[0.04] hover:border-emerald-500/15 transition-all"
+                            >
+                                <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center mb-4 group-hover:bg-emerald-500/15 transition-colors">
+                                    <feature.icon className="w-5 h-5 text-emerald-400" />
+                                </div>
+                                <h3 className="text-white font-semibold mb-2">{feature.title}</h3>
+                                <p className="text-sm text-slate-500 leading-relaxed">{feature.desc}</p>
+                            </div>
+                        ))}
+                    </div>
                 </div>
             </main>
 
-            {/* Footer spacing */}
-            <div className="h-16" />
+            {/* Footer */}
+            <footer className="relative z-10 border-t border-white/[0.04] py-8">
+                <div className="max-w-6xl mx-auto px-6 flex items-center justify-between">
+                    <span className="text-xs text-slate-600">© 2025 Atom</span>
+                    <div className="flex items-center gap-4">
+                        <span className="text-xs text-slate-600">Built with ❤️ and too much caffeine</span>
+                    </div>
+                </div>
+            </footer>
         </div>
     );
 }
