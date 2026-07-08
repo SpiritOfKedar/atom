@@ -29,24 +29,24 @@ export const isModelProvider = (value: string): value is ModelProvider =>
 export const modelProviderLabel = (provider: ModelProvider): string => {
     switch (provider) {
         case 'openai':
-            return 'OpenAI (gpt-4o-mini)';
+            return 'ChatGPT (GPT-4o mini)';
         case 'claude':
-            return 'Claude (3.5 Haiku)';
+            return 'Claude Sonnet 5';
         case 'gemini':
-            return 'Gemini (2.5 Flash)';
+            return 'Google Gemini 3.1 Pro';
         default:
-            return provider;
+            return modelProviderShortLabel(provider);
     }
 };
 
 export const modelProviderShortLabel = (provider: ModelProvider): string => {
     switch (provider) {
         case 'openai':
-            return 'GPT-4o';
+            return 'ChatGPT';
         case 'claude':
-            return 'Claude';
+            return 'Claude Sonnet 5';
         case 'gemini':
-            return 'Gemini';
+            return 'Google Gemini 3.1 Pro';
         case 'z-ai/glm-5.2':
             return 'GLM-5.2';
         case 'mistralai/mistral-medium-3.5-128b':
@@ -92,9 +92,9 @@ export const modelProviderDescription = (provider: ModelProvider): string => {
         case 'openai':
             return 'Reliable general-purpose model from OpenAI';
         case 'claude':
-            return 'Careful, well-reasoned answers from Anthropic';
+            return 'Anthropic Claude Sonnet 5 for careful reasoning';
         case 'gemini':
-            return "Google's fast multimodal model";
+            return "Google's Gemini 3.1 Pro multimodal model";
         default:
             return '';
     }

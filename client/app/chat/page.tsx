@@ -5,6 +5,7 @@ import { useAuth, useUser, SignInButton, SignUpButton } from '@clerk/nextjs';
 import { useSearchParams } from 'next/navigation';
 import { SourceCarousel } from '@/components/source-carousel';
 import { ChatInterface } from '@/components/chat-interface';
+import { AnswerMarkdown } from '@/components/answer-markdown';
 import { Sidebar } from '@/components/sidebar';
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -414,9 +415,7 @@ export default function ChatPage() {
 
                                                         {message.content ? (
                                                             <div className="relative p-6 rounded-2xl glass">
-                                                                <div className="prose prose-invert max-w-none text-base leading-relaxed break-words text-white/90">
-                                                                    <div className="whitespace-pre-wrap">{message.content}</div>
-                                                                </div>
+                                                                <AnswerMarkdown content={message.content} />
                                                             </div>
                                                         ) : (
                                                             <div className="space-y-4 p-6 rounded-2xl glass">

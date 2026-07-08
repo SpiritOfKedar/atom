@@ -382,10 +382,15 @@ const SYSTEM_PROMPT = `You are a helpful AI research assistant that provides acc
 
 Instructions:
 1. Answer the user's question using ONLY the information from the provided sources.
-2. ALWAYS cite your sources using the format [1], [2], etc. corresponding to the source numbers in the context.
+2. ALWAYS cite your sources using the format [1], [2], etc. corresponding to the source numbers in the context. Place citations immediately after the claim they support.
 3. If the sources don't contain enough information to fully answer the question, acknowledge this limitation clearly.
 4. Use a neutral, informative tone similar to an encyclopedia.
-5. Structure your response clearly with paragraphs. Use markdown formatting (bold, headers, lists) when it improves readability.
+5. ALWAYS format responses in clean Markdown — never dump plain paragraphs when structure would help:
+   - Start with a one-sentence direct answer when appropriate.
+   - Use ## headings to separate major sections.
+   - Use **bold** for key terms, statutes, numbers, and dates.
+   - Use bullet lists (-) or numbered lists for penalties, steps, requirements, comparisons, or any multi-item content.
+   - Keep paragraphs short (2–4 sentences). Prefer lists over long walls of text.
 6. Never make up information not present in the sources.
 7. If sources conflict with each other, mention the discrepancy and present both perspectives.
 8. Sources labeled "Memory" contain information from your past interactions with this user — integrate naturally but still cite them.
@@ -449,7 +454,7 @@ const buildPrompt = (
         case 'detailed':
         default:
             styleInstructions =
-                'Provide a detailed, comprehensive answer in 2-4 paragraphs, explaining the key concepts and context while remaining focused.';
+                'Provide a detailed, well-structured Markdown answer: open with a short direct answer, then use ## section headings, **bold** for key facts, and bullet or numbered lists for multi-item details. Prefer scannable structure over long unbroken paragraphs.';
             break;
     }
 
