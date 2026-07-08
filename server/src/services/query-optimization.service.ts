@@ -17,21 +17,39 @@ const CONTEXT = 'QueryOptimizationService';
  * @param query - Original user query
  * @returns Optimized query string
  */
+/**
+ * Skip the LLM rewrite when the query is already clear enough for Serper.
+ * Saves a full round-trip without hurting recall on well-formed questions.
+ */
+const isSearchReady = (query: string): boolean => {
+    const words = query.trim().split(/\s+/).filter(Boolean);
+    if (words.length < 5 || words.length > 28) return false;
+    // Very vague / underspecified — still worth optimizing
+    if (/^(this|that|it|they|he|she)\b/i.test(query.trim())) return false;
+    if (/\b(stuff|things|something|somehow)\b/i.test(query)) return false;
+    return true;
+};
+
 export const optimizeQuery = async (
     query: string,
-    provider: ModelProvider = 'z-ai/glm-5.2'
+    provider: ModelProvider = 'mistralai/mistral-medium-3.5-128b'
 ): Promise<string> => {
     if (!query || query.trim().length === 0) {
         return query;
     }
 
     const trimmedQuery = query.trim();
-    
+
     // Check cache first (Redis with in-memory fallback)
     const cachedOptimized = await getCachedOptimizedQuery(trimmedQuery);
     if (cachedOptimized) {
         logger.debug(`Cache hit for query: "${trimmedQuery.substring(0, 50)}..."`, CONTEXT);
         return cachedOptimized;
+    }
+
+    if (isSearchReady(trimmedQuery)) {
+        logger.debug(`Skipping LLM optimize — query already search-ready`, CONTEXT);
+        return trimmedQuery;
     }
 
     logger.info(`Optimizing query: "${trimmedQuery.substring(0, 50)}..."`, CONTEXT);

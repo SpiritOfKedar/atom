@@ -167,61 +167,66 @@ export const handleChat = async (req: Request, res: Response): Promise<void> => 
             return;
         }
 
-        // Validate answer quality after streaming completes
+        // Validate + follow-ups in parallel (post-stream; never blocks TTFT)
         if (fullAnswer && result.ragContexts && result.ragContexts.length > 0) {
-            try {
-                sendStatus(res, 'Validating answer...');
-                const validation = await validateAnswer(
-                    fullAnswer,
-                    result.ragContexts,
-                    sanitizedQuery,
-                    effectiveModelProvider
-                );
+            const postWork: Promise<void>[] = [];
 
-                // Send validation result to client
-                safeWrite(res, {
-                    type: 'validation',
-                    data: {
-                        isValid: validation.isValid,
-                        confidence: validation.confidence,
-                        issues: validation.issues,
-                        summary: validation.summary,
+            postWork.push(
+                (async () => {
+                    try {
+                        sendStatus(res, 'Validating answer...');
+                        const validation = await validateAnswer(
+                            fullAnswer,
+                            result.ragContexts,
+                            sanitizedQuery,
+                            effectiveModelProvider
+                        );
+
+                        safeWrite(res, {
+                            type: 'validation',
+                            data: {
+                                isValid: validation.isValid,
+                                confidence: validation.confidence,
+                                issues: validation.issues,
+                                summary: validation.summary,
+                            }
+                        });
+
+                        logger.info(
+                            `Answer validation: isValid=${validation.isValid}, ` +
+                            `confidence=${validation.confidence.toFixed(2)}`,
+                            CONTEXT
+                        );
+                    } catch (validationError: any) {
+                        logger.warn(`Answer validation failed: ${validationError.message}`, CONTEXT);
                     }
-                });
+                })()
+            );
 
-                logger.info(
-                    `Answer validation: isValid=${validation.isValid}, ` +
-                    `confidence=${validation.confidence.toFixed(2)}`,
-                    CONTEXT
-                );
-            } catch (validationError: any) {
-                logger.warn(`Answer validation failed: ${validationError.message}`, CONTEXT);
-                // Continue without validation
-            }
-        }
+            postWork.push(
+                (async () => {
+                    try {
+                        sendStatus(res, 'Generating follow-up questions...');
+                        const followUpQuestions = await generateFollowUpQuestions(
+                            sanitizedQuery,
+                            fullAnswer,
+                            result.ragContexts,
+                            effectiveModelProvider
+                        );
 
-        // Generate follow-up questions
-        if (fullAnswer && result.ragContexts && result.ragContexts.length > 0) {
-            try {
-                sendStatus(res, 'Generating follow-up questions...');
-                const followUpQuestions = await generateFollowUpQuestions(
-                    sanitizedQuery,
-                    fullAnswer,
-                    result.ragContexts,
-                    effectiveModelProvider
-                );
+                        safeWrite(res, {
+                            type: 'followUps',
+                            data: followUpQuestions
+                        });
 
-                // Send follow-up questions to client
-                safeWrite(res, {
-                    type: 'followUps',
-                    data: followUpQuestions
-                });
+                        logger.info(`Generated ${followUpQuestions.length} follow-up questions`, CONTEXT);
+                    } catch (followUpError: any) {
+                        logger.warn(`Follow-up question generation failed: ${followUpError.message}`, CONTEXT);
+                    }
+                })()
+            );
 
-                logger.info(`Generated ${followUpQuestions.length} follow-up questions`, CONTEXT);
-            } catch (followUpError: any) {
-                logger.warn(`Follow-up question generation failed: ${followUpError.message}`, CONTEXT);
-                // Continue without follow-up questions
-            }
+            await Promise.all(postWork);
         }
 
         if (authReq.userId) {

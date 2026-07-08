@@ -58,8 +58,8 @@ export type AnswerStyle = 'concise' | 'detailed' | 'bullet-points';
  * NVIDIA NIM models (OpenAI-compatible via integrate.api.nvidia.com).
  */
 export const NVAPI_MODELS = [
-    'z-ai/glm-5.2',
     'mistralai/mistral-medium-3.5-128b',
+    'z-ai/glm-5.2',
     'nvidia/nemotron-3-ultra-550b-a55b',
     'minimaxai/minimax-m3',
     'deepseek-ai/deepseek-v4-pro',

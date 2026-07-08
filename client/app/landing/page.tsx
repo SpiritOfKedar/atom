@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, KeyboardEvent } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth, useUser, UserButton, SignInButton, SignUpButton } from '@clerk/nextjs';
@@ -73,11 +73,19 @@ export default function LandingPage() {
     const [displayedPlaceholder, setDisplayedPlaceholder] = useState('');
     const [isTyping, setIsTyping] = useState(true);
     const [mounted, setMounted] = useState(false);
+    const searchTextareaRef = useRef<HTMLTextAreaElement>(null);
 
     useEffect(() => {
         const raf = requestAnimationFrame(() => setMounted(true));
         return () => cancelAnimationFrame(raf);
     }, []);
+
+    useEffect(() => {
+        const el = searchTextareaRef.current;
+        if (!el) return;
+        el.style.height = 'auto';
+        el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
+    }, [searchQuery]);
 
     // Typewriter effect
     useEffect(() => {
@@ -112,6 +120,15 @@ export default function LandingPage() {
         e.preventDefault();
         if (searchQuery.trim()) {
             router.push(`/chat?q=${encodeURIComponent(searchQuery.trim())}&mp=${encodeURIComponent(modelProvider)}`);
+        }
+    };
+
+    const handleSearchKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            if (searchQuery.trim()) {
+                handleSearch(e);
+            }
         }
     };
 
@@ -221,20 +238,22 @@ export default function LandingPage() {
                                 "shadow-[0_20px_60px_-15px_rgba(0,0,0,0.6)]",
                                 "focus-within:border-white/25 focus-within:shadow-[0_20px_70px_-10px_rgba(0,0,0,0.7)] focus-within:-translate-y-0.5"
                             )}>
-                                <div className="flex items-center">
-                                    <Search className="ml-5 w-5 h-5 text-white/50 group-focus-within:text-brand transition-colors shrink-0" />
-                                    <input
-                                        type="text"
+                                <div className="flex items-start gap-3 px-4 pt-4 pb-1">
+                                    <Search className="mt-2.5 w-5 h-5 text-white/50 group-focus-within:text-brand transition-colors shrink-0" />
+                                    <textarea
+                                        ref={searchTextareaRef}
+                                        rows={1}
                                         value={searchQuery}
                                         onChange={(e) => setSearchQuery(e.target.value)}
+                                        onKeyDown={handleSearchKeyDown}
                                         placeholder={displayedPlaceholder + '|'}
-                                        className="flex-1 px-4 py-5 bg-transparent text-white text-lg placeholder:text-white/40 focus:outline-none"
+                                        className="flex-1 min-h-[44px] max-h-[160px] resize-none overflow-y-auto bg-transparent text-white text-lg leading-6 placeholder:text-white/40 focus:outline-none"
                                     />
                                     <button
                                         type="submit"
                                         disabled={!searchQuery.trim()}
                                         className={cn(
-                                            "mr-3 p-2.5 rounded-xl transition-all duration-200 shrink-0",
+                                            "mt-1 p-2.5 rounded-xl transition-all duration-200 shrink-0",
                                             searchQuery.trim()
                                                 ? "bg-brand text-brand-foreground hover:scale-110 active:scale-95 shadow-lg shadow-brand/30"
                                                 : "bg-white/10 text-white/40"
@@ -249,7 +268,7 @@ export default function LandingPage() {
                                         <ModelSelector modelProvider={modelProvider} onChange={setModelProvider} />
                                     </div>
                                     <span className="text-[11px] text-white/35 pt-2.5">
-                                        Press Enter to search
+                                        Enter to search · Shift+Enter for newline
                                     </span>
                                 </div>
                             </div>

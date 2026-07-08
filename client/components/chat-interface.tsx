@@ -1,7 +1,6 @@
 'use client';
 
-import React, { FormEvent, useRef, useState } from 'react';
-import { Input } from "@/components/ui/input";
+import React, { FormEvent, KeyboardEvent, useEffect, useRef, useState } from 'react';
 import { Button } from "@/components/ui/button";
 import {
     ArrowRight,
@@ -46,6 +45,12 @@ interface Attachment {
     file: File;
 }
 
+function autoResize(el: HTMLTextAreaElement | null) {
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
+}
+
 export function ChatInterface({
     query,
     setQuery,
@@ -58,7 +63,12 @@ export function ChatInterface({
     const [attachments, setAttachments] = useState<Attachment[]>([]);
     const [showAttachMenu, setShowAttachMenu] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const textareaRef = useRef<HTMLTextAreaElement>(null);
     const [fileType, setFileType] = useState<'image' | 'pdf' | 'audio'>('image');
+
+    useEffect(() => {
+        autoResize(textareaRef.current);
+    }, [query]);
 
     const handleFileSelect = (type: 'image' | 'pdf' | 'audio') => {
         setFileType(type);
@@ -87,6 +97,15 @@ export function ChatInterface({
 
     const handleSuggestionClick = (suggestion: typeof QUICK_SUGGESTIONS[0]) => {
         setQuery(suggestion.query);
+        requestAnimationFrame(() => textareaRef.current?.focus());
+    };
+
+    const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            if (!query.trim() || isLoading) return;
+            onSubmit(e as unknown as FormEvent);
+        }
     };
 
     return (
@@ -122,7 +141,6 @@ export function ChatInterface({
                     "focus-within:border-white/25 focus-within:shadow-[0_16px_50px_-12px_rgba(0,0,0,0.7)]",
                     hasSearched ? "rounded-xl" : "rounded-2xl shadow-[0_20px_60px_-15px_rgba(0,0,0,0.6)]"
                 )}>
-                    {/* Attachments preview */}
                     {attachments.length > 0 && (
                         <div className="flex flex-wrap gap-2 px-4 pt-3">
                             {attachments.map((attachment, index) => (
@@ -146,26 +164,27 @@ export function ChatInterface({
                         </div>
                     )}
 
-                    {/* Input row */}
-                    <div className="flex items-center">
-                        <Search className="absolute left-5 h-5 w-5 text-white/50 group-focus-within:text-brand transition-colors" />
-                        <Input
+                    <div className="flex items-start gap-3 px-4 pt-3.5 pb-1">
+                        <Search className="mt-2.5 h-5 w-5 text-white/50 group-focus-within:text-brand transition-colors shrink-0" />
+                        <textarea
+                            ref={textareaRef}
+                            rows={1}
                             value={query}
                             onChange={(e) => setQuery(e.target.value)}
+                            onKeyDown={handleKeyDown}
                             disabled={isLoading}
-                            placeholder="Ask anything. Type @ for mentions..."
+                            placeholder="Ask anything. Type / for mentions..."
                             className={cn(
-                                "pl-14 pr-32 h-14 w-full border-0 bg-transparent",
-                                "text-lg text-white placeholder:text-white/40",
-                                "focus-visible:ring-0 focus-visible:ring-offset-0"
+                                "flex-1 min-h-[44px] max-h-[200px] w-full resize-none overflow-y-auto",
+                                "bg-transparent border-0 outline-none",
+                                "text-[15px] leading-6 text-white placeholder:text-white/40",
+                                "disabled:opacity-50"
                             )}
                         />
                     </div>
 
-                    {/* Bottom toolbar */}
                     <div className="flex items-center justify-between px-4 pb-3 pt-1">
                         <div className="flex items-center gap-1.5">
-                            {/* Mode buttons */}
                             <Button
                                 type="button"
                                 variant="ghost"
@@ -189,7 +208,6 @@ export function ChatInterface({
                         </div>
 
                         <div className="flex items-center gap-1">
-                            {/* Attachment buttons */}
                             <div className="relative">
                                 <Button
                                     type="button"
@@ -201,7 +219,6 @@ export function ChatInterface({
                                     <Paperclip className="w-4 h-4" />
                                 </Button>
 
-                                {/* Attachment dropdown */}
                                 {showAttachMenu && (
                                     <div className="absolute bottom-full right-0 mb-2 glass-heavy rounded-xl p-1.5 shadow-2xl min-w-[160px] animate-in fade-in slide-in-from-bottom-2 duration-200">
                                         <button
@@ -250,7 +267,6 @@ export function ChatInterface({
                                 <Mic className="w-4 h-4" />
                             </Button>
 
-                            {/* Submit button */}
                             <Button
                                 type="submit"
                                 size="icon"
@@ -273,7 +289,6 @@ export function ChatInterface({
                 </div>
             </form>
 
-            {/* Quick suggestions */}
             {!hasSearched && (
                 <div className="flex flex-wrap justify-center gap-2 mt-8 animate-in fade-in slide-in-from-bottom-4 duration-700 delay-200">
                     {QUICK_SUGGESTIONS.map((suggestion, index) => (

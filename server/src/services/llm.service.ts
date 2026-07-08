@@ -383,18 +383,18 @@ const SYSTEM_PROMPT = `You are a helpful AI research assistant that provides acc
 Instructions:
 1. Answer the user's question using ONLY the information from the provided sources.
 2. ALWAYS cite your sources using the format [1], [2], etc. corresponding to the source numbers in the context. Place citations immediately after the claim they support.
-3. If the sources don't contain enough information to fully answer the question, acknowledge this limitation clearly.
+3. If the sources don't contain enough information to fully answer the question, acknowledge this limitation clearly — do NOT invent dates, outcomes, or facts to fill gaps.
 4. Use a neutral, informative tone similar to an encyclopedia.
-5. ALWAYS format responses in clean Markdown — never dump plain paragraphs when structure would help:
+5. ALWAYS format responses in clean Markdown:
    - Start with a one-sentence direct answer when appropriate.
    - Use ## headings to separate major sections.
-   - Use **bold** for key terms, statutes, numbers, and dates.
-   - Use bullet lists (-) or numbered lists for penalties, steps, requirements, comparisons, or any multi-item content.
-   - Keep paragraphs short (2–4 sentences). Prefer lists over long walls of text.
-6. Never make up information not present in the sources.
-7. If sources conflict with each other, mention the discrepancy and present both perspectives.
-8. Sources labeled "Memory" contain information from your past interactions with this user — integrate naturally but still cite them.
-9. Prioritize more recent information when sources have different dates.`;
+   - Use **bold** for key terms, numbers, and dates.
+   - Use bullet or numbered lists for multi-item details.
+6. Go deep when the question calls for it (legal implications, how something works, comparisons, history): cover key context, caveats, and important edge cases found in the sources — not just a surface summary.
+7. Never make up information not present in the sources.
+8. If sources conflict, present both perspectives and note which is more recent or authoritative.
+9. Sources labeled "Memory" are past interactions with this user — integrate naturally but still cite them.
+10. Prioritize more recent information when sources have different dates.`;
 
 /**
  * Builds a prompt for the LLM with the given context.
@@ -454,7 +454,7 @@ const buildPrompt = (
         case 'detailed':
         default:
             styleInstructions =
-                'Provide a detailed, well-structured Markdown answer: open with a short direct answer, then use ## section headings, **bold** for key facts, and bullet or numbered lists for multi-item details. Prefer scannable structure over long unbroken paragraphs.';
+                'Provide a thorough, well-structured Markdown answer. Open with a short direct answer, then expand with ## headings covering the important angles found in the sources (context, details, caveats). Use **bold** for key facts and lists for multi-item details. Match depth to the question: simple fact queries stay brief; complex or consequential topics should be substantive, not a shallow summary.';
             break;
     }
 
@@ -521,7 +521,7 @@ export const streamCompletion = async (
                 ],
                 stream: true,
                 temperature: 0.3,
-                max_tokens: 2048,
+                max_tokens: 3072,
             });
 
             for await (const chunk of stream) {
@@ -538,7 +538,7 @@ export const streamCompletion = async (
                 ],
                 stream: true,
                 temperature: 0.3,
-                max_completion_tokens: 2048,
+                max_completion_tokens: 3072,
             });
 
             for await (const chunk of stream) {
@@ -552,7 +552,7 @@ export const streamCompletion = async (
                 system: SYSTEM_PROMPT,
                 messages: [{ role: 'user', content: prompt }],
                 temperature: 0.3,
-                max_tokens: 2048,
+                max_tokens: 3072,
             });
 
             for await (const event of stream) {
@@ -572,7 +572,7 @@ export const streamCompletion = async (
                 contents: [{ role: 'user', parts: [{ text: prompt }] }],
                 generationConfig: {
                     temperature: 0.3,
-                    maxOutputTokens: 2048,
+                    maxOutputTokens: 3072,
                 },
             });
 
@@ -586,7 +586,7 @@ export const streamCompletion = async (
                 systemPrompt: SYSTEM_PROMPT,
                 userPrompt: prompt,
                 temperature: 0.3,
-                maxTokens: 2048,
+                maxTokens: 3072,
             });
             fullContent = completion.text;
             await streamTextChunks(fullContent, res, onToken);

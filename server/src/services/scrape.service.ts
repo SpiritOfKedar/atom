@@ -8,7 +8,9 @@ import { assertUrlSafeForFetch } from '../utils/url-safety';
 
 const CONTEXT = 'ScrapeService';
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
-const TIMEOUT_MS = 3000;
+const TIMEOUT_MS = 2200;
+/** Soft budget for parallel scrapes so the RAG pipeline can proceed with whatever finished. */
+export const SCRAPE_BUDGET_MS = 2800;
 const MAX_CONTENT_LENGTH_BASE = 1500; // Base characters per source
 const MAX_CONTENT_LENGTH_TOP = 2500; // Max for top-ranked sources
 const MAX_CONTENT_LENGTH_LOW = 1000; // Max for lower-ranked sources
@@ -455,8 +457,8 @@ export const scrapeMultiple = async (urls: string[]): Promise<ScrapedContent[]> 
     logger.info(`Scraping ${urls.length} URLs in parallel`, CONTEXT);
 
     const results = await retryMultiple(urls, scrapePage, {
-        maxAttempts: 2,
-        initialDelayMs: 500,
+        maxAttempts: 1,
+        initialDelayMs: 300,
     });
 
     return results.map((res) => {
@@ -470,4 +472,40 @@ export const scrapeMultiple = async (urls: string[]): Promise<ScrapedContent[]> 
             success: false,
         };
     });
+};
+
+/**
+ * Scrapes URLs in parallel but returns as soon as the budget elapses.
+ * Finished pages are kept; unfinished ones become empty failures so the
+ * pipeline can fall back to search snippets without waiting on stragglers.
+ */
+export const scrapeMultipleWithBudget = async (
+    urls: string[],
+    budgetMs: number = SCRAPE_BUDGET_MS
+): Promise<ScrapedContent[]> => {
+    logger.info(`Scraping ${urls.length} URLs with ${budgetMs}ms budget`, CONTEXT);
+
+    const results: ScrapedContent[] = urls.map((url) => ({
+        url,
+        title: 'Failed to load',
+        content: 'Unable to retrieve content from this source.',
+        success: false,
+    }));
+
+    const tasks = urls.map(async (url, index) => {
+        try {
+            results[index] = await scrapePage(url);
+        } catch {
+            // keep placeholder failure
+        }
+    });
+
+    await Promise.race([
+        Promise.allSettled(tasks),
+        new Promise<void>((resolve) => setTimeout(resolve, budgetMs)),
+    ]);
+
+    const ok = results.filter((r) => r.success).length;
+    logger.info(`Scrape budget done: ${ok}/${urls.length} pages ready`, CONTEXT);
+    return results;
 };

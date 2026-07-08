@@ -1,7 +1,6 @@
 import { Response } from 'express';
 import { searchWeb } from './search.service';
-import { extractRelevantContent } from './scrape.service';
-import { addScrapeJob, scrapeQueueEvents } from '../queues/scraper.queue';
+import { extractRelevantContent, scrapeMultipleWithBudget } from './scrape.service';
 import { streamCompletion, generateStandaloneQuery } from './llm.service';
 import { AnswerStyle, ModelProvider, RAGContext, SearchResult, SearchType, ScrapedContent } from '../types';
 import { logger } from '../utils/logger';
@@ -112,7 +111,7 @@ export const runRAGPipeline = async (
     conversationHistory?: IMessage[],
     searchType?: SearchType,
     answerStyle: AnswerStyle = 'detailed',
-    modelProvider: ModelProvider = 'z-ai/glm-5.2',
+    modelProvider: ModelProvider = 'mistralai/mistral-medium-3.5-128b',
     userId?: string,
     isClientConnected?: () => boolean
 ): Promise<RAGPipelineResult> => {
@@ -208,9 +207,9 @@ export const runRAGPipeline = async (
     sendStatus(res, 'Reading sources...');
     const urls = searchResults.map((r) => r.link);
 
-    // Add scrape job to queue and wait for completion
-    const job = await addScrapeJob(urls);
-    const scrapedContents = await job.waitUntilFinished(scrapeQueueEvents) as ScrapedContent[];
+    // Direct scrape with a soft time budget — skip BullMQ hop so TTFT stays low.
+    // Pages that miss the budget fall back to Serper snippets (already available).
+    const scrapedContents = await scrapeMultipleWithBudget(urls);
 
     // Rank sources by relevance, freshness, and authority
     sendStatus(res, 'Ranking sources...');

@@ -31,7 +31,7 @@ export const validateAnswer = async (
     answer: string,
     sources: RAGContext[],
     query: string,
-    provider: ModelProvider = 'z-ai/glm-5.2'
+    provider: ModelProvider = 'mistralai/mistral-medium-3.5-128b'
 ): Promise<ValidationResult> => {
     logger.info(`Validating answer for query: "${query.substring(0, 50)}..."`, CONTEXT);
 
