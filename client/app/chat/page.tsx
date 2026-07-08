@@ -60,6 +60,7 @@ export default function ChatPage() {
 
     const bottomRef = useRef<HTMLDivElement>(null);
     const initialQueryProcessedRef = useRef(false);
+    const stickToBottomRef = useRef(true);
 
     // Process initial query from URL - using ref to prevent double execution
     useEffect(() => {
@@ -78,6 +79,7 @@ export default function ChatPage() {
 
         setHasSearched(true);
         setIsLoading(true);
+        stickToBottomRef.current = true;
 
         // Increment guest message count
         if (!isSignedIn) {
@@ -285,14 +287,28 @@ export default function ChatPage() {
         setHasSearched(false);
     };
 
+    // Only pin to bottom while the user is already near the bottom.
+    // Lets them scroll up during streaming without being yanked back down.
     useEffect(() => {
+        const onScroll = () => {
+            const distanceFromBottom =
+                document.documentElement.scrollHeight - window.scrollY - window.innerHeight;
+            stickToBottomRef.current = distanceFromBottom < 140;
+        };
+        window.addEventListener('scroll', onScroll, { passive: true });
+        return () => window.removeEventListener('scroll', onScroll);
+    }, []);
+
+    useEffect(() => {
+        if (!stickToBottomRef.current) return;
         if (isLoading || messages.length > 0) {
-            bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+            // Instant scroll while streaming so smooth animation doesn't fight user input
+            bottomRef.current?.scrollIntoView({ behavior: isLoading ? 'auto' : 'smooth' });
         }
     }, [messages, isLoading]);
 
     return (
-        <div className="min-h-screen relative">
+        <div className="min-h-screen relative overflow-x-clip">
             {/* Wallpaper backdrop */}
             <div
                 className="fixed inset-0 bg-cover bg-center"
@@ -343,10 +359,11 @@ export default function ChatPage() {
 
             <div className={cn(
                 "transition-all duration-300",
-                sidebarOpen ? "ml-64" : "ml-16"
+                "ml-0 md:ml-16",
+                sidebarOpen && "md:ml-64"
             )}>
-                <main className="relative z-10 flex flex-col min-h-screen font-sans text-foreground max-w-4xl mx-auto px-4 md:px-8">
-                    <div className="flex-1 py-8">
+                <main className="relative z-10 flex flex-col min-h-screen font-sans text-foreground max-w-4xl mx-auto px-3 sm:px-4 md:px-8 pt-12 md:pt-0">
+                    <div className="flex-1 py-6 sm:py-8">
                         {!hasSearched && (
                             <div className="flex flex-col items-center justify-center min-h-[60vh]">
                                 <ChatInterface
@@ -368,12 +385,12 @@ export default function ChatPage() {
 
                         {hasSearched && (
                             <>
-                                <div className="space-y-12 pb-32 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                                <div className="space-y-8 sm:space-y-12 pb-36 sm:pb-32 animate-in fade-in slide-in-from-bottom-4 duration-500">
                                     {messages.map((message, idx) => (
                                         <div key={idx} className="space-y-6">
                                             {message.role === 'user' ? (
                                                 <div className="flex flex-col gap-2">
-                                                    <h2 className="text-2xl font-bold tracking-tight text-white px-3 border-l-4 border-brand [text-shadow:0_2px_12px_rgba(0,0,0,0.5)]">
+                                                    <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-white px-2 sm:px-3 border-l-4 border-brand [text-shadow:0_2px_12px_rgba(0,0,0,0.5)]">
                                                         {message.content}
                                                     </h2>
                                                 </div>
@@ -414,11 +431,11 @@ export default function ChatPage() {
                                                         </div>
 
                                                         {message.content ? (
-                                                            <div className="relative p-6 rounded-2xl glass">
+                                                            <div className="relative p-4 sm:p-6 rounded-2xl glass">
                                                                 <AnswerMarkdown content={message.content} />
                                                             </div>
                                                         ) : (
-                                                            <div className="space-y-4 p-6 rounded-2xl glass">
+                                                            <div className="space-y-4 p-4 sm:p-6 rounded-2xl glass">
                                                                 <Skeleton className="h-4 w-full bg-white/10" />
                                                                 <Skeleton className="h-4 w-[90%] bg-white/10" />
                                                                 <Skeleton className="h-4 w-[80%] bg-white/10" />
@@ -435,8 +452,9 @@ export default function ChatPage() {
 
                                 <div className="fixed bottom-0 left-0 right-0 z-20 pointer-events-none">
                                     <div className={cn(
-                                        "mx-auto w-full transition-all duration-300 px-4 pb-8 pt-12 bg-gradient-to-t from-black/80 via-black/50 to-transparent pointer-events-auto",
-                                        sidebarOpen ? "pl-[272px] pr-8" : "pl-20 pr-8"
+                                        "mx-auto w-full transition-all duration-300 px-3 sm:px-4 pb-4 sm:pb-8 pt-12 bg-gradient-to-t from-black/80 via-black/50 to-transparent pointer-events-auto",
+                                        "md:pl-20 md:pr-8",
+                                        sidebarOpen && "md:pl-[272px]"
                                     )}>
                                         <div className="max-w-3xl mx-auto">
                                             <ChatInterface

@@ -24,7 +24,9 @@ import {
     LogOut,
     Trash2,
     MessageSquare,
-    User
+    User,
+    Menu,
+    X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -113,36 +115,76 @@ export function Sidebar({
 
     return (
         <>
+            {/* Mobile top bar + menu button */}
+            <div className="md:hidden fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-3 h-12 bg-black/40 backdrop-blur-xl border-b border-white/10">
+                <button
+                    type="button"
+                    aria-label={isOpen ? 'Close menu' : 'Open menu'}
+                    onClick={onToggle}
+                    className="h-9 w-9 flex items-center justify-center rounded-lg text-white/80 hover:bg-white/10"
+                >
+                    {isOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+                </button>
+                <button
+                    type="button"
+                    onClick={() => router.push('/')}
+                    className="flex items-center gap-2"
+                >
+                    <img src="/atom-logo.png" alt="Atom" className="w-7 h-7 invert" />
+                    <span className="text-base font-semibold text-white">Atom</span>
+                </button>
+                <div className="w-9" />
+            </div>
+
+            {/* Mobile overlay backdrop */}
+            {isOpen && (
+                <button
+                    type="button"
+                    aria-label="Close sidebar"
+                    className="md:hidden fixed inset-0 z-40 bg-black/50 backdrop-blur-sm"
+                    onClick={onToggle}
+                />
+            )}
+
             <aside className={cn(
-                "fixed left-0 top-0 h-full z-40 flex flex-col overflow-visible",
+                "fixed top-0 h-full z-50 flex flex-col overflow-visible",
                 "bg-black/50 backdrop-blur-2xl border-r border-white/10",
                 "transition-all duration-300",
-                isOpen ? "w-64" : "w-16"
+                // Mobile: slide-over drawer; Desktop: icon rail / expanded panel
+                "left-0 w-[min(20rem,85vw)]",
+                isOpen ? "translate-x-0" : "-translate-x-full",
+                "md:translate-x-0",
+                isOpen ? "md:w-64" : "md:w-16"
             )}>
                 <div className="p-4 flex items-center gap-3 cursor-pointer group" onClick={() => router.push('/')}>
                     <img src="/atom-logo.png" alt="Atom" className="w-8 h-8 shrink-0 invert transition-transform duration-300 group-hover:rotate-12" />
-                    {isOpen && (
-                        <span className="text-lg font-semibold text-white animate-in fade-in duration-300">
-                            Atom
-                        </span>
-                    )}
+                    <span className={cn(
+                        "text-lg font-semibold text-white animate-in fade-in duration-300",
+                        !isOpen && "md:hidden"
+                    )}>
+                        Atom
+                    </span>
                 </div>
 
                 <nav className="flex-1 px-2 py-4 space-y-1 overflow-y-auto">
                     <button
-                        onClick={onNewConversation}
+                        onClick={() => {
+                            onNewConversation?.();
+                            if (typeof window !== 'undefined' && window.innerWidth < 768) onToggle();
+                        }}
                         className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl glass-light text-white hover:bg-white/12 transition-all duration-200"
                     >
                         <Plus className="w-5 h-5 shrink-0" />
-                        {isOpen && (
-                            <span className="text-sm font-medium animate-in fade-in duration-300">
-                                New Thread
-                            </span>
-                        )}
+                        <span className={cn(
+                            "text-sm font-medium animate-in fade-in duration-300",
+                            !isOpen && "md:hidden"
+                        )}>
+                            New Thread
+                        </span>
                     </button>
 
-                    {isOpen && isSignedIn && conversations.length > 0 && (
-                        <div className="mt-4">
+                    {isSignedIn && conversations.length > 0 && (
+                        <div className={cn("mt-4", !isOpen && "md:hidden")}>
                             <div className="flex items-center gap-2 px-3 py-2 text-xs text-white/40 uppercase tracking-wide">
                                 <Clock className="w-3 h-3" />
                                 <span>Recent</span>
@@ -151,7 +193,10 @@ export function Sidebar({
                                 {conversations.map((convo) => (
                                     <button
                                         key={convo._id}
-                                        onClick={() => onSelectConversation?.(convo._id)}
+                                        onClick={() => {
+                                            onSelectConversation?.(convo._id);
+                                            if (typeof window !== 'undefined' && window.innerWidth < 768) onToggle();
+                                        }}
                                         className={cn(
                                             "w-full flex items-center gap-2 px-3 py-2 rounded-lg transition-colors duration-200 group",
                                             activeConversationId === convo._id
@@ -189,11 +234,12 @@ export function Sidebar({
                                 )}
                             >
                                 <item.icon className="w-5 h-5 shrink-0" />
-                                {isOpen && (
-                                    <span className="text-sm font-medium animate-in fade-in duration-300">
-                                        {item.label}
-                                    </span>
-                                )}
+                                <span className={cn(
+                                    "text-sm font-medium animate-in fade-in duration-300",
+                                    !isOpen && "md:hidden"
+                                )}>
+                                    {item.label}
+                                </span>
                             </button>
                         ))}
                     </div>
@@ -202,24 +248,24 @@ export function Sidebar({
                 <div className="px-2 pb-4 space-y-1">
                     <button className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-white/60 hover:text-white hover:bg-white/[0.07] transition-colors duration-200">
                         <MoreHorizontal className="w-5 h-5 shrink-0" />
-                        {isOpen && <span className="text-sm font-medium">More</span>}
+                        <span className={cn("text-sm font-medium", !isOpen && "md:hidden")}>More</span>
                     </button>
                 </div>
 
                 <div className={cn(
                     "border-t border-white/[0.08]",
-                    isOpen ? "p-4" : "px-2 py-4"
+                    isOpen ? "p-4" : "p-4 md:px-2 md:py-4"
                 )}>
                     <button className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-white/60 hover:text-white hover:bg-white/[0.07] transition-colors duration-200">
                         <Settings className="w-5 h-5 shrink-0" />
-                        {isOpen && <span className="text-sm font-medium">Settings</span>}
+                        <span className={cn("text-sm font-medium", !isOpen && "md:hidden")}>Settings</span>
                     </button>
 
                     <Button
                         variant="ghost"
                         size="icon"
                         onClick={onToggle}
-                        className="w-full mt-2 h-8 text-white/50 hover:text-white hover:bg-white/[0.07]"
+                        className="hidden md:flex w-full mt-2 h-8 text-white/50 hover:text-white hover:bg-white/[0.07]"
                     >
                         <ChevronRight className={cn(
                             "w-4 h-4 transition-transform duration-300",
@@ -230,12 +276,12 @@ export function Sidebar({
 
                 <div className={cn(
                     "border-t border-white/[0.08] space-y-2",
-                    isOpen ? "p-4" : "px-2 py-4"
+                    isOpen ? "p-4" : "p-4 md:px-2 md:py-4"
                 )}>
                     <SignedIn>
                         <div className={cn(
                             "w-full flex items-center gap-3 rounded-xl glass-light",
-                            isOpen ? "px-3 py-2.5" : "p-2 justify-center"
+                            isOpen ? "px-3 py-2.5" : "px-3 py-2.5 md:p-2 md:justify-center"
                         )}>
                             <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center shrink-0">
                                 {user?.imageUrl ? (
@@ -244,28 +290,29 @@ export function Sidebar({
                                     <User className="w-4 h-4 text-white/60" />
                                 )}
                             </div>
-                            {isOpen && (
-                                <span className="text-sm font-medium text-white truncate flex-1">
-                                    {user?.firstName || user?.username || 'User'}
-                                </span>
-                            )}
+                            <span className={cn(
+                                "text-sm font-medium text-white truncate flex-1",
+                                !isOpen && "md:hidden"
+                            )}>
+                                {user?.firstName || user?.username || 'User'}
+                            </span>
                         </div>
                         <button
                             onClick={() => signOut({ redirectUrl: '/landing' })}
                             className={cn(
                                 "w-full flex items-center gap-3 rounded-lg text-red-400 hover:bg-red-500/10 transition-colors duration-200",
-                                isOpen ? "px-3 py-2.5" : "p-2 justify-center"
+                                isOpen ? "px-3 py-2.5" : "px-3 py-2.5 md:p-2 md:justify-center"
                             )}
                         >
                             <LogOut className="w-5 h-5 shrink-0" />
-                            {isOpen && <span className="text-sm font-medium">Sign Out</span>}
+                            <span className={cn("text-sm font-medium", !isOpen && "md:hidden")}>Sign Out</span>
                         </button>
                     </SignedIn>
                     <SignedOut>
                         <SignInButton mode="modal">
                             <button className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl glass-light text-white hover:bg-white/12 transition-all duration-200">
                                 <LogIn className="w-5 h-5 shrink-0" />
-                                {isOpen && <span className="text-sm font-medium">Sign In</span>}
+                                <span className={cn("text-sm font-medium", !isOpen && "md:hidden")}>Sign In</span>
                             </button>
                         </SignInButton>
                     </SignedOut>

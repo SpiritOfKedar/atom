@@ -95,9 +95,9 @@ export function ModelSelector({ modelProvider, onChange, className }: ModelSelec
             </PopoverTrigger>
             <PopoverContent
                 className={cn(
-                    'w-[360px] p-0 overflow-hidden rounded-2xl border-white/[0.1]',
-                    'bg-[#0c0e12]/92 backdrop-blur-2xl',
-                    'shadow-[0_24px_80px_-12px_rgba(0,0,0,0.75),0_0_0_1px_rgba(255,255,255,0.06)]'
+                    'w-[min(360px,calc(100vw-2rem))] p-0 overflow-hidden rounded-2xl border-white/[0.1]',
+                    '!bg-transparent backdrop-blur-xl',
+                    'shadow-[0_24px_80px_-12px_rgba(0,0,0,0.45),0_0_0_1px_rgba(255,255,255,0.06)]'
                 )}
                 align="start"
             >

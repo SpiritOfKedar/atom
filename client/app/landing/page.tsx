@@ -7,9 +7,6 @@ import { useAuth, useUser, UserButton, SignInButton, SignUpButton } from '@clerk
 import {
     Search,
     ArrowRight,
-    Globe,
-    Shield,
-    Sparkles,
     BookOpen,
     Code,
     TrendingUp,
@@ -40,27 +37,6 @@ const USE_CASES = [
     { icon: Microscope, label: 'Science', query: 'Explain the science behind ' },
     { icon: Scale, label: 'Legal', query: 'What are the legal implications of ' },
     { icon: Palette, label: 'Creative', query: 'Generate ideas for ' },
-];
-
-const FEATURES = [
-    {
-        icon: Globe,
-        title: 'Real-time search',
-        desc: 'Every answer is backed by live web sources, not stale training data.',
-        gradient: 'from-sky-400 to-blue-600',
-    },
-    {
-        icon: Sparkles,
-        title: 'Nine models, one box',
-        desc: 'GLM, DeepSeek, Nemotron, GPT, Claude, Gemini and more — switch mid-conversation.',
-        gradient: 'from-emerald-400 to-teal-600',
-    },
-    {
-        icon: Shield,
-        title: 'Verified answers',
-        desc: 'Built-in hallucination detection validates every response against its sources.',
-        gradient: 'from-violet-400 to-purple-600',
-    },
 ];
 
 export default function LandingPage() {
@@ -212,7 +188,7 @@ export default function LandingPage() {
                     </div>
 
                     <h1 className={cn(
-                        "text-5xl md:text-7xl lg:text-8xl font-bold tracking-tight mb-6",
+                        "text-4xl sm:text-5xl md:text-7xl lg:text-8xl font-bold tracking-tight mb-6",
                         mounted && "animate-fade-up delay-200"
                     )}>
                         <span className="text-white [text-shadow:0_4px_30px_rgba(0,0,0,0.45)]">Search smarter.</span>
@@ -223,7 +199,7 @@ export default function LandingPage() {
                     </h1>
 
                     <p className={cn(
-                        "text-lg md:text-xl text-white/75 max-w-xl mx-auto mb-12 leading-relaxed [text-shadow:0_2px_16px_rgba(0,0,0,0.5)]",
+                        "text-base sm:text-lg md:text-xl text-white/75 max-w-xl mx-auto mb-10 sm:mb-12 leading-relaxed [text-shadow:0_2px_16px_rgba(0,0,0,0.5)]",
                         mounted && "animate-fade-up delay-300"
                     )}>
                         AI-powered answers with real sources. Search the web, get cited
@@ -263,11 +239,11 @@ export default function LandingPage() {
                                     </button>
                                 </div>
 
-                                <div className="flex items-center justify-between px-4 pb-3 pt-0.5 border-t border-white/[0.07]">
-                                    <div className="pt-2.5">
+                                <div className="flex items-center justify-between gap-2 px-4 pb-3 pt-0.5 border-t border-white/[0.07]">
+                                    <div className="pt-2.5 min-w-0">
                                         <ModelSelector modelProvider={modelProvider} onChange={setModelProvider} />
                                     </div>
-                                    <span className="text-[11px] text-white/35 pt-2.5">
+                                    <span className="hidden sm:inline text-[11px] text-white/35 pt-2.5 shrink-0">
                                         Enter to search · Shift+Enter for newline
                                     </span>
                                 </div>
@@ -306,13 +282,7 @@ export default function LandingPage() {
 
             {/* ============ BELOW THE FOLD ============ */}
             <main className="relative z-10">
-                {/* Soft ambient glow behind cards */}
-                <div className="pointer-events-none absolute inset-x-0 top-0 h-[500px] overflow-hidden">
-                    <div className="absolute left-1/2 top-24 -translate-x-1/2 w-[700px] h-[300px] rounded-full bg-brand/[0.05] blur-3xl" />
-                </div>
-
-                {/* Quick links */}
-                <div className="max-w-5xl mx-auto px-6 pt-16 pb-4 flex items-center justify-center gap-8">
+                <div className="max-w-5xl mx-auto px-6 pt-10 sm:pt-16 pb-10 flex flex-wrap items-center justify-center gap-6 sm:gap-8">
                     {isSignedIn && (
                         <Link
                             href="/chat"
@@ -329,40 +299,6 @@ export default function LandingPage() {
                         Discover trending
                         <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
                     </Link>
-                </div>
-
-                {/* Feature cards */}
-                <div className="max-w-5xl mx-auto px-6 pt-12 pb-28 relative">
-                    <div className="flex items-center gap-3 mb-8">
-                        <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-[0.2em]">Why Atom</h2>
-                        <div className="flex-1 h-px bg-gradient-to-r from-border to-transparent" />
-                    </div>
-                    <div className="grid md:grid-cols-3 gap-5">
-                        {FEATURES.map((feature) => (
-                            <div
-                                key={feature.title}
-                                className="group relative p-7 rounded-2xl glass overflow-hidden
-                                    transition-all duration-300 hover:-translate-y-1.5 hover:border-white/20
-                                    hover:shadow-[0_24px_60px_-20px_rgba(0,0,0,0.7)]"
-                            >
-                                {/* Gradient sheen on hover */}
-                                <div className={cn(
-                                    "absolute -top-24 -right-24 w-48 h-48 rounded-full bg-gradient-to-br opacity-0 blur-3xl",
-                                    "group-hover:opacity-15 transition-opacity duration-500",
-                                    feature.gradient
-                                )} />
-                                <div className={cn(
-                                    "relative w-11 h-11 rounded-xl bg-gradient-to-br flex items-center justify-center mb-5",
-                                    "shadow-lg transition-transform duration-300 group-hover:scale-110 group-hover:rotate-3",
-                                    feature.gradient
-                                )}>
-                                    <feature.icon className="w-5 h-5 text-white" />
-                                </div>
-                                <h3 className="relative text-foreground font-semibold mb-2.5 text-[15px]">{feature.title}</h3>
-                                <p className="relative text-sm text-muted-foreground leading-relaxed">{feature.desc}</p>
-                            </div>
-                        ))}
-                    </div>
                 </div>
             </main>
 

@@ -126,10 +126,10 @@ export function ChatInterface({
                         <Sparkles className="w-3 h-3 text-brand" />
                         <span className="text-xs text-white/75">Powered by AI</span>
                     </div>
-                    <h1 className="text-4xl md:text-5xl font-bold tracking-tight mb-4 text-white [text-shadow:0_4px_24px_rgba(0,0,0,0.5)]">
+                    <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold tracking-tight mb-4 text-white [text-shadow:0_4px_24px_rgba(0,0,0,0.5)]">
                         What do you want to know?
                     </h1>
-                    <p className="text-white/70 text-lg [text-shadow:0_2px_12px_rgba(0,0,0,0.5)]">
+                    <p className="text-white/70 text-base sm:text-lg [text-shadow:0_2px_12px_rgba(0,0,0,0.5)]">
                         Search the web with AI-powered answers
                     </p>
                 </div>
@@ -183,13 +183,13 @@ export function ChatInterface({
                         />
                     </div>
 
-                    <div className="flex items-center justify-between px-4 pb-3 pt-1">
-                        <div className="flex items-center gap-1.5">
+                    <div className="flex items-center justify-between gap-2 px-3 sm:px-4 pb-3 pt-1">
+                        <div className="flex items-center gap-1.5 min-w-0 overflow-x-auto scrollbar-none">
                             <Button
                                 type="button"
                                 variant="ghost"
                                 size="sm"
-                                className="h-8 px-3 rounded-full bg-brand/20 text-brand hover:bg-brand/25 hover:text-brand"
+                                className="h-8 px-3 rounded-full bg-brand/20 text-brand hover:bg-brand/25 hover:text-brand shrink-0"
                             >
                                 <Search className="w-3.5 h-3.5 mr-1.5" />
                                 Search
@@ -198,7 +198,7 @@ export function ChatInterface({
                                 type="button"
                                 variant="ghost"
                                 size="sm"
-                                className="h-8 px-3 rounded-full text-white/60 hover:bg-white/10 hover:text-white"
+                                className="hidden sm:inline-flex h-8 px-3 rounded-full text-white/60 hover:bg-white/10 hover:text-white shrink-0"
                             >
                                 <Sparkles className="w-3.5 h-3.5 mr-1.5" />
                                 Focus
@@ -207,7 +207,7 @@ export function ChatInterface({
                             <ModelSelector modelProvider={modelProvider} onChange={setModelProvider} />
                         </div>
 
-                        <div className="flex items-center gap-1">
+                        <div className="hidden sm:flex items-center gap-1 shrink-0">
                             <div className="relative">
                                 <Button
                                     type="button"
@@ -285,6 +285,23 @@ export function ChatInterface({
                                 )}
                             </Button>
                         </div>
+                        <Button
+                            type="submit"
+                            size="icon"
+                            disabled={!query.trim() || isLoading}
+                            className={cn(
+                                "sm:hidden h-8 w-8 rounded-lg shrink-0 transition-all duration-200",
+                                "bg-brand text-brand-foreground hover:bg-brand/90",
+                                "shadow-lg shadow-brand/25",
+                                "disabled:opacity-40 disabled:shadow-none"
+                            )}
+                        >
+                            {isLoading ? (
+                                <div className="w-4 h-4 border-2 border-brand-foreground/30 border-t-brand-foreground rounded-full animate-spin" />
+                            ) : (
+                                <ArrowRight className="h-4 w-4" />
+                            )}
+                        </Button>
                     </div>
                 </div>
             </form>
