@@ -100,6 +100,46 @@ export const modelProviderDescription = (provider: ModelProvider): string => {
     }
 };
 
+/** Brand logo path under /public for model picker icons. */
+export const modelProviderLogo = (provider: ModelProvider): string => {
+    switch (provider) {
+        case 'z-ai/glm-5.2':
+            return '/models/zai.png';
+        case 'mistralai/mistral-medium-3.5-128b':
+            return '/models/mistral.png';
+        case 'nvidia/nemotron-3-ultra-550b-a55b':
+            return '/models/nvidia.png';
+        case 'minimaxai/minimax-m3':
+            return '/models/minimax.png';
+        case 'deepseek-ai/deepseek-v4-pro':
+        case 'deepseek-ai/deepseek-v4-flash':
+            return '/models/deepseek.png';
+        case 'openai':
+            return '/models/openai.png';
+        case 'claude':
+            return '/models/claude.png';
+        case 'gemini':
+            return '/models/gemini.png';
+        default:
+            return '/models/zai.png';
+    }
+};
+
+/** How the logo tile should crop/contain each brand mark. */
+export type ModelLogoFit = 'cover' | 'contain';
+
+export const modelProviderLogoFit = (provider: ModelProvider): ModelLogoFit => {
+    switch (provider) {
+        case 'z-ai/glm-5.2':
+        case 'minimaxai/minimax-m3':
+        case 'nvidia/nemotron-3-ultra-550b-a55b':
+        case 'gemini':
+            return 'cover';
+        default:
+            return 'contain';
+    }
+};
+
 export const ALL_MODEL_PROVIDERS: ModelProvider[] = [
     ...NVAPI_MODELS,
     'openai',

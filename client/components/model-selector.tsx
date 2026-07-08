@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useMemo, useState } from 'react';
-import { Check, ChevronDown, Cpu } from 'lucide-react';
+import { Check, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
     Popover,
@@ -13,6 +13,8 @@ import {
     ModelProvider,
     modelProviderDescription,
     modelProviderGroup,
+    modelProviderLogo,
+    modelProviderLogoFit,
     modelProviderShortLabel,
 } from '@/lib/models';
 
@@ -22,25 +24,43 @@ interface ModelSelectorProps {
     className?: string;
 }
 
-/** Per-vendor gradient used for the little monogram tiles. */
-const GROUP_GRADIENTS: Record<string, string> = {
-    'NVIDIA NIM': 'from-emerald-400 to-teal-600',
-    'OpenAI': 'from-slate-200 to-slate-500',
-    'Anthropic': 'from-orange-300 to-amber-600',
-    'Google': 'from-sky-300 to-blue-600',
-};
+function ModelLogo({
+    provider,
+    size = 'md',
+    className,
+}: {
+    provider: ModelProvider;
+    size?: 'sm' | 'md';
+    className?: string;
+}) {
+    const fit = modelProviderLogoFit(provider);
+    const dim = size === 'sm' ? 'w-5 h-5' : 'w-9 h-9';
+    const needsPad = fit === 'contain';
+    const pad = needsPad ? (size === 'sm' ? 'p-[3px]' : 'p-1.5') : 'p-0';
 
-function Monogram({ provider, group }: { provider: ModelProvider; group: string }) {
-    const initial = modelProviderShortLabel(provider).charAt(0).toUpperCase();
     return (
         <div
             className={cn(
-                'w-8 h-8 rounded-lg bg-gradient-to-br flex items-center justify-center shrink-0',
-                'text-[11px] font-bold text-black/80 shadow-inner',
-                GROUP_GRADIENTS[group] ?? 'from-slate-300 to-slate-600'
+                dim,
+                'rounded-[10px] overflow-hidden shrink-0',
+                needsPad ? 'bg-white' : 'bg-white/[0.06]',
+                'ring-1 ring-inset ring-white/[0.1]',
+                pad,
+                className
             )}
         >
-            {initial}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+                src={modelProviderLogo(provider)}
+                alt=""
+                aria-hidden
+                className={cn(
+                    'w-full h-full',
+                    fit === 'cover' ? 'object-cover' : 'object-contain',
+                    provider === 'gemini' && 'scale-[1.28]'
+                )}
+                draggable={false}
+            />
         </div>
     );
 }
@@ -65,7 +85,7 @@ export function ModelSelector({ modelProvider, onChange, className }: ModelSelec
                     type="button"
                     aria-label="Select AI model"
                     className={cn(
-                        'inline-flex items-center gap-2 h-8 pl-2.5 pr-2 rounded-full',
+                        'inline-flex items-center gap-2 h-8 pl-1.5 pr-2 rounded-full',
                         'glass-light text-xs font-medium text-white/80',
                         'hover:bg-white/10 hover:text-white transition-all duration-200',
                         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60',
@@ -73,71 +93,95 @@ export function ModelSelector({ modelProvider, onChange, className }: ModelSelec
                         className
                     )}
                 >
-                    <Cpu className="w-3.5 h-3.5 text-brand" />
+                    <ModelLogo provider={modelProvider} size="sm" className="rounded-full ring-0" />
                     <span className="truncate max-w-[130px]">{modelProviderShortLabel(modelProvider)}</span>
-                    <ChevronDown className={cn('w-3.5 h-3.5 text-white/50 transition-transform duration-200', open && 'rotate-180')} />
+                    <ChevronDown
+                        className={cn(
+                            'w-3.5 h-3.5 text-white/45 transition-transform duration-200',
+                            open && 'rotate-180'
+                        )}
+                    />
                 </button>
             </PopoverTrigger>
             <PopoverContent
-                className="w-[340px] max-h-[400px] overflow-y-auto glass-heavy rounded-2xl p-2 shadow-2xl shadow-black/60"
+                className={cn(
+                    'w-[360px] p-0 overflow-hidden rounded-2xl border-white/[0.1]',
+                    'bg-[#0c0e12]/92 backdrop-blur-2xl',
+                    'shadow-[0_24px_80px_-12px_rgba(0,0,0,0.75),0_0_0_1px_rgba(255,255,255,0.06)]'
+                )}
                 align="start"
             >
-                <div className="px-2.5 pt-1.5 pb-2 border-b border-white/[0.06] mb-1">
-                    <p className="text-sm font-semibold text-white">Choose a model</p>
-                    <p className="text-[11px] text-white/40">Answers are generated with the model you pick</p>
+                <div className="px-4 pt-3.5 pb-3 border-b border-white/[0.06]">
+                    <p className="text-[13px] font-semibold tracking-tight text-white">
+                        Choose a model
+                    </p>
+                    <p className="text-[11px] text-white/40 mt-0.5 leading-snug">
+                        Answers are generated with the model you pick
+                    </p>
                 </div>
-                {groups.map(([group, providers]) => (
-                    <div key={group} className="mb-1 last:mb-0">
-                        <div className="flex items-center gap-2 px-2.5 py-1.5">
-                            <span
-                                className={cn(
-                                    'w-1.5 h-1.5 rounded-full bg-gradient-to-br',
-                                    GROUP_GRADIENTS[group] ?? 'from-slate-300 to-slate-600'
-                                )}
-                            />
-                            <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-white/40">
-                                {group}
-                            </span>
+
+                <div className="max-h-[min(420px,55vh)] overflow-y-auto overscroll-contain p-2">
+                    {groups.map(([group, providers], groupIndex) => (
+                        <div
+                            key={group}
+                            className={cn(groupIndex > 0 && 'mt-1.5 pt-1.5 border-t border-white/[0.05]')}
+                        >
+                            <div className="px-2.5 py-1.5">
+                                <span className="text-[10px] font-medium uppercase tracking-[0.16em] text-white/30">
+                                    {group}
+                                </span>
+                            </div>
+                            <div className="flex flex-col gap-0.5">
+                                {providers.map((provider) => {
+                                    const active = provider === modelProvider;
+                                    return (
+                                        <button
+                                            key={provider}
+                                            type="button"
+                                            onClick={() => {
+                                                onChange(provider);
+                                                setOpen(false);
+                                            }}
+                                            className={cn(
+                                                'w-full flex items-center gap-3 rounded-xl px-2.5 py-2.5 text-left',
+                                                'transition-colors duration-150',
+                                                active
+                                                    ? 'bg-white/[0.08]'
+                                                    : 'hover:bg-white/[0.045]'
+                                            )}
+                                        >
+                                            <ModelLogo provider={provider} />
+                                            <div className="flex-1 min-w-0">
+                                                <div
+                                                    className={cn(
+                                                        'text-[13px] font-medium tracking-tight truncate',
+                                                        active ? 'text-white' : 'text-white/90'
+                                                    )}
+                                                >
+                                                    {modelProviderShortLabel(provider)}
+                                                </div>
+                                                <div className="text-[11px] text-white/40 truncate mt-0.5 leading-snug">
+                                                    {modelProviderDescription(provider)}
+                                                </div>
+                                            </div>
+                                            <div
+                                                className={cn(
+                                                    'w-5 h-5 rounded-full flex items-center justify-center shrink-0 transition-opacity',
+                                                    active
+                                                        ? 'bg-white text-black opacity-100'
+                                                        : 'opacity-0'
+                                                )}
+                                                aria-hidden={!active}
+                                            >
+                                                <Check className="w-3 h-3" strokeWidth={2.75} />
+                                            </div>
+                                        </button>
+                                    );
+                                })}
+                            </div>
                         </div>
-                        {providers.map((provider) => {
-                            const active = provider === modelProvider;
-                            return (
-                                <button
-                                    key={provider}
-                                    type="button"
-                                    onClick={() => {
-                                        onChange(provider);
-                                        setOpen(false);
-                                    }}
-                                    className={cn(
-                                        'w-full flex items-center gap-3 rounded-xl px-2.5 py-2 text-left transition-all duration-150 group/row',
-                                        active
-                                            ? 'bg-brand/15 ring-1 ring-brand/30'
-                                            : 'hover:bg-white/[0.06]'
-                                    )}
-                                >
-                                    <Monogram provider={provider} group={group} />
-                                    <div className="flex-1 min-w-0">
-                                        <div className={cn(
-                                            'text-[13px] font-semibold truncate',
-                                            active ? 'text-brand' : 'text-white/90'
-                                        )}>
-                                            {modelProviderShortLabel(provider)}
-                                        </div>
-                                        <div className="text-[11px] text-white/40 truncate">
-                                            {modelProviderDescription(provider)}
-                                        </div>
-                                    </div>
-                                    {active && (
-                                        <div className="w-5 h-5 rounded-full bg-brand flex items-center justify-center shrink-0">
-                                            <Check className="w-3 h-3 text-brand-foreground" strokeWidth={3} />
-                                        </div>
-                                    )}
-                                </button>
-                            );
-                        })}
-                    </div>
-                ))}
+                    ))}
+                </div>
             </PopoverContent>
         </Popover>
     );
