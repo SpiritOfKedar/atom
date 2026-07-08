@@ -1,6 +1,6 @@
-import { useAuth } from '@clerk/nextjs';
+import { getApiUrl } from './api';
 
-const API_BASE = 'http://localhost:3001/api';
+const API_BASE = getApiUrl();
 
 export interface Message {
     role: 'user' | 'assistant';

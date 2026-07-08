@@ -2,12 +2,16 @@
   "name": "server",
   "version": "1.0.0",
   "description": "",
-  "main": "src/server.ts",
+  "main": "dist/server.js",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
-    "start": "ts-node src/server.ts",
+    "start": "node dist/server.js",
     "dev": "nodemon src/server.ts",
     "build": "tsc",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "test": "NODE_ENV=test GUEST_MESSAGE_LIMIT=2 tsx --test src/utils/url-safety.test.ts src/utils/apiError.test.ts src/services/guest-quota.service.test.ts"
   },
   "keywords": [],
   "author": "",
@@ -28,6 +32,7 @@
     "dotenv": "^17.2.3",
     "express": "^5.2.1",
     "express-rate-limit": "^8.2.1",
+    "helmet": "^8.2.0",
     "ioredis": "^5.9.0",
     "langchain": "^1.2.13",
     "mongodb": "^7.0.0",
@@ -42,6 +47,7 @@
     "@types/node": "^25.0.10",
     "nodemon": "^3.1.11",
     "ts-node": "^10.9.2",
+    "tsx": "^4.22.4",
     "typescript": "^5.9.3"
   }
 }

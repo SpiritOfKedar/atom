@@ -11,6 +11,7 @@ import {
     Globe,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
 
 const TOPICS = ['Tech & Science', 'Finance', 'Arts & Culture', 'Sports', 'World', 'Politics', 'Health'];
 
@@ -91,24 +92,24 @@ export default function DiscoverPage() {
     const listItems = items.slice(5);          // Compact list
 
     return (
-        <div className="flex-1 overflow-y-auto bg-[#080808]">
+        <div className="flex-1 overflow-y-auto bg-background">
             {/* Header */}
-            <div className="sticky top-0 z-20 bg-[#080808]/90 backdrop-blur-xl border-b border-white/[0.04] px-6 pt-5 pb-0">
+            <div className="sticky top-0 z-20 bg-background/90 backdrop-blur-xl border-b border-border px-6 pt-5 pb-0">
                 <div className="max-w-[1200px] mx-auto flex items-center justify-between mb-4">
                     <div className="flex items-center gap-3">
-                        <h1 className="text-xl font-semibold text-white tracking-tight">Discover</h1>
-                        <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20">
-                            <Flame className="w-3 h-3 text-emerald-400" />
-                            <span className="text-[10px] font-semibold text-emerald-400 uppercase tracking-wider">Live</span>
-                        </div>
+                        <h1 className="text-xl font-semibold text-foreground tracking-tight">Discover</h1>
+                        <Badge variant="brand">
+                            <Flame className="w-3 h-3" />
+                            Live
+                        </Badge>
                     </div>
                     <button
                         onClick={() => fetchNews(activeTab, activeTopic)}
                         disabled={loading}
                         className={cn(
-                            "flex items-center gap-2 px-3.5 py-1.5 rounded-full text-sm transition-all",
-                            "bg-white/[0.05] hover:bg-white/[0.08] text-slate-400 hover:text-white",
-                            "border border-white/[0.06] disabled:opacity-40"
+                            "flex items-center gap-2 px-3.5 py-1.5 rounded-full text-sm transition-colors",
+                            "bg-secondary hover:bg-secondary/70 text-muted-foreground hover:text-foreground",
+                            "border border-border disabled:opacity-40"
                         )}
                     >
                         <RefreshCw className={cn("w-3.5 h-3.5", loading && "animate-spin")} />
@@ -122,15 +123,15 @@ export default function DiscoverPage() {
                             key={tab}
                             onClick={() => handleTabChange(tab)}
                             className={cn(
-                                "px-4 py-2.5 text-sm font-medium transition-all relative",
+                                "px-4 py-2.5 text-sm font-medium transition-colors relative",
                                 activeTab === tab
-                                    ? "text-white"
-                                    : "text-slate-500 hover:text-slate-300"
+                                    ? "text-foreground"
+                                    : "text-muted-foreground hover:text-foreground"
                             )}
                         >
                             {tab}
                             {activeTab === tab && (
-                                <div className="absolute bottom-0 left-2 right-2 h-0.5 bg-emerald-500 rounded-full" />
+                                <div className="absolute bottom-0 left-2 right-2 h-0.5 bg-brand rounded-full" />
                             )}
                         </button>
                     ))}
@@ -139,17 +140,17 @@ export default function DiscoverPage() {
 
             {/* Topics bar */}
             {activeTab === 'Topics' && (
-                <div className="border-b border-white/[0.04] bg-white/[0.01]">
+                <div className="border-b border-border bg-card/40">
                     <div className="max-w-[1200px] mx-auto px-6 py-4 flex flex-wrap gap-2">
                         {TOPICS.map((topic) => (
                             <button
                                 key={topic}
                                 onClick={() => handleTopicClick(topic)}
                                 className={cn(
-                                    "flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium transition-all",
+                                    "flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium transition-colors",
                                     activeTopic === topic
-                                        ? "bg-emerald-500 text-white shadow-lg shadow-emerald-500/25"
-                                        : "bg-white/[0.04] text-slate-400 hover:text-white hover:bg-white/[0.08] border border-white/[0.06]"
+                                        ? "bg-brand text-brand-foreground"
+                                        : "bg-secondary text-muted-foreground hover:text-foreground hover:bg-secondary/70 border border-border"
                                 )}
                             >
                                 {TOPIC_ICONS[topic]}
@@ -164,26 +165,26 @@ export default function DiscoverPage() {
             <div className="max-w-[1200px] mx-auto px-6 py-8">
                 {loading ? (
                     <div className="space-y-6 animate-in fade-in duration-300">
-                        <div className="h-[420px] rounded-2xl bg-white/[0.03] animate-pulse" />
+                        <div className="h-[420px] rounded-2xl bg-secondary animate-pulse" />
                         <div className="grid grid-cols-2 gap-4">
-                            <div className="h-[320px] rounded-xl bg-white/[0.03] animate-pulse" />
-                            <div className="h-[320px] rounded-xl bg-white/[0.03] animate-pulse" />
+                            <div className="h-[320px] rounded-xl bg-secondary animate-pulse" />
+                            <div className="h-[320px] rounded-xl bg-secondary animate-pulse" />
                         </div>
                         <div className="grid grid-cols-3 gap-4">
                             {[...Array(3)].map((_, i) => (
-                                <div key={i} className="h-[250px] rounded-xl bg-white/[0.03] animate-pulse" />
+                                <div key={i} className="h-[250px] rounded-xl bg-secondary animate-pulse" />
                             ))}
                         </div>
                     </div>
                 ) : error ? (
                     <div className="flex flex-col items-center justify-center py-24 gap-4">
-                        <div className="w-12 h-12 rounded-full bg-red-500/10 flex items-center justify-center mb-2">
+                        <div className="w-12 h-12 rounded-full bg-destructive/10 flex items-center justify-center mb-2">
                             <span className="text-2xl">😕</span>
                         </div>
-                        <p className="text-slate-400 text-sm">{error}</p>
+                        <p className="text-muted-foreground text-sm">{error}</p>
                         <button
                             onClick={() => fetchNews(activeTab, activeTopic)}
-                            className="px-5 py-2 rounded-full bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-500 transition-colors"
+                            className="px-5 py-2 rounded-full bg-brand text-brand-foreground text-sm font-medium hover:bg-brand/90 transition-colors"
                         >
                             Try again
                         </button>
@@ -225,8 +226,8 @@ export default function DiscoverPage() {
                         {gridItems.length > 0 && (
                             <>
                                 <div className="flex items-center gap-3 pt-4">
-                                    <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider">More Stories</h2>
-                                    <div className="flex-1 h-px bg-white/[0.04]" />
+                                    <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">More Stories</h2>
+                                    <div className="flex-1 h-px bg-border" />
                                 </div>
 
                                 {/* 3-col grid */}
@@ -251,8 +252,8 @@ export default function DiscoverPage() {
                         {listItems.length > 0 && (
                             <>
                                 <div className="flex items-center gap-3 pt-4">
-                                    <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider">Also Trending</h2>
-                                    <div className="flex-1 h-px bg-white/[0.04]" />
+                                    <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Also Trending</h2>
+                                    <div className="flex-1 h-px bg-border" />
                                 </div>
 
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -273,7 +274,7 @@ export default function DiscoverPage() {
                         )}
 
                         {items.length === 0 && !hero && (
-                            <p className="text-center text-slate-500 py-20">No stories found.</p>
+                            <p className="text-center text-muted-foreground py-20">No stories found.</p>
                         )}
                     </div>
                 )}

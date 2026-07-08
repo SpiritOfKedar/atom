@@ -57,3 +57,11 @@ export const initScraperWorker = (): Worker | null => {
         return null;
     }
 };
+
+export const closeScraperWorker = async (): Promise<void> => {
+    if (worker) {
+        await worker.close();
+        worker = null;
+        logger.info('Scraper worker closed', CONTEXT);
+    }
+};

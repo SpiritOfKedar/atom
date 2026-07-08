@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { runRAGPipeline } from '../services/rag.service';
-import { ExtendedChatRequest } from '../types';
+import { ExtendedChatRequest, isNvapiModel, NVAPI_MODELS } from '../types';
 import { logger } from '../utils/logger';
 import { ApiError } from '../utils/apiError';
 import { AuthenticatedRequest, optionalAuth } from '../middleware/auth.middleware';
@@ -60,6 +60,9 @@ const sanitizeErrorForClient = (error: any): string => {
     if (message.includes('no search results')) {
         return 'No search results found for your query. Try rephrasing it.';
     }
+    if (message.includes('search service') || message.includes('not configured')) {
+        return 'Search is temporarily unavailable. Please try again later.';
+    }
     if (message.includes('mongo') || message.includes('redis') || message.includes('econnrefused')) {
         return 'A database error occurred. Please try again later.';
     }
@@ -85,11 +88,13 @@ export const handleChat = async (req: Request, res: Response): Promise<void> => 
     }
 
     const sanitizedQuery = query.trim().substring(0, 500);
-    const allowedProviders = ['openai', 'claude', 'gemini'] as const;
+    const classicProviders = ['openai', 'claude', 'gemini'] as const;
     const effectiveModelProvider =
-        modelProvider && allowedProviders.includes(modelProvider)
+        modelProvider &&
+        (classicProviders.includes(modelProvider as (typeof classicProviders)[number]) ||
+            isNvapiModel(modelProvider))
             ? modelProvider
-            : 'openai';
+            : NVAPI_MODELS[0];
 
     logger.info(`Received chat request: "${sanitizedQuery.substring(0, 50)}..."`, CONTEXT);
 
@@ -269,7 +274,29 @@ export const handleChat = async (req: Request, res: Response): Promise<void> => 
 };
 
 /**
- * Basic health check endpoint
+ * Readiness probe — returns 503 when MongoDB is not connected.
+ */
+export const readinessCheck = (_req: Request, res: Response): void => {
+    const mongoReady = mongoose.connection.readyState === 1;
+
+    if (!mongoReady) {
+        res.status(503).json({
+            status: 'unavailable',
+            timestamp: new Date().toISOString(),
+            dependencies: { mongodb: 'disconnected' },
+        });
+        return;
+    }
+
+    res.json({
+        status: 'ready',
+        timestamp: new Date().toISOString(),
+        dependencies: { mongodb: 'connected' },
+    });
+};
+
+/**
+ * Basic health check endpoint (liveness)
  */
 export const healthCheck = (_req: Request, res: Response): void => {
     res.json({
@@ -294,6 +321,7 @@ export const detailedHealthCheck = async (_req: Request, res: Response): Promise
             openai: 'not_configured',
             claude: 'not_configured',
             gemini: 'not_configured',
+            nvapi: 'not_configured',
             serper: 'not_configured',
         }
     };
@@ -332,6 +360,11 @@ export const detailedHealthCheck = async (_req: Request, res: Response): Promise
     // Check Gemini Config
     if (env.geminiApiKey) {
         healthData.dependencies.gemini = 'configured';
+    }
+
+    // Check NVIDIA NIM / nvapi Config
+    if (env.nvidiaApiKey) {
+        healthData.dependencies.nvapi = 'configured';
     }
 
     // Check Serper Config

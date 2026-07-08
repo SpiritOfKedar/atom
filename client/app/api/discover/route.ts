@@ -1,4 +1,6 @@
 import { NextResponse } from 'next/server';
+import { isUrlSafeForFetch } from '@/lib/url-safety';
+import { getClientKeyFromRequest, isDiscoverRateLimited } from '@/lib/discover-rate-limit';
 
 const SERPER_API_URL = 'https://google.serper.dev/news';
 
@@ -31,6 +33,10 @@ interface SerperNewsResponse {
  * Returns null on any failure (timeout, parse error, missing tag).
  */
 async function fetchOgImage(url: string): Promise<string | null> {
+    if (!isUrlSafeForFetch(url)) {
+        return null;
+    }
+
     try {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 3000);
@@ -72,6 +78,11 @@ async function fetchOgImage(url: string): Promise<string | null> {
 }
 
 export async function GET(request: Request) {
+    const clientKey = getClientKeyFromRequest(request);
+    if (isDiscoverRateLimited(clientKey)) {
+        return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
+    }
+
     const { searchParams } = new URL(request.url);
     const tab = searchParams.get('tab') || 'Top';
     const topic = searchParams.get('topic') || '';

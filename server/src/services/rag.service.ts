@@ -112,7 +112,7 @@ export const runRAGPipeline = async (
     conversationHistory?: IMessage[],
     searchType?: SearchType,
     answerStyle: AnswerStyle = 'detailed',
-    modelProvider: ModelProvider = 'openai',
+    modelProvider: ModelProvider = 'z-ai/glm-5.2',
     userId?: string,
     isClientConnected?: () => boolean
 ): Promise<RAGPipelineResult> => {
@@ -155,10 +155,9 @@ export const runRAGPipeline = async (
         // Continue with unoptimized query
     }
 
-    // Step 3: Retrieve Long-term Memory (Vector Search)
-    const effectiveUserId = userId || 'anonymous';
-    const memoryEnabled = modelProvider === 'openai';
-    const memories = memoryEnabled ? await searchMemory(effectiveUserId, effectiveQuery) : [];
+    // Step 3: Retrieve Long-term Memory (Vector Search) — authenticated users only
+    const memoryEnabled = Boolean(userId) && modelProvider === 'openai';
+    const memories = memoryEnabled ? await searchMemory(userId!, effectiveQuery) : [];
     if (memories.length > 0) {
         logger.info(`Retrieved ${memories.length} memories for query`, CONTEXT);
         sendStatus(res, 'Recalling past interactions...');
@@ -181,7 +180,17 @@ export const runRAGPipeline = async (
     }
 
     sendStatus(res, searchStatusMessage);
-    const searchResults = await searchWeb(effectiveQuery, 5, effectiveSearchType);
+    let searchResults = await searchWeb(effectiveQuery, 5, effectiveSearchType);
+
+    // Specialized strategies can still return empty; one more plain-web attempt.
+    if (searchResults.length === 0 && effectiveSearchType !== 'web') {
+        logger.warn(
+            `${effectiveSearchType} search empty after service fallbacks, retrying web search`,
+            CONTEXT
+        );
+        sendStatus(res, 'Searching the web...');
+        searchResults = await searchWeb(effectiveQuery, 5, 'web');
+    }
 
     if (searchResults.length === 0) {
         throw new Error('No search results found');
@@ -304,11 +313,9 @@ export const runRAGPipeline = async (
         modelProvider
     );
 
-    // Save to Memory (fire and forget or await)
-    // We store the generic "User Query" + "AI Answer" combo
-    if (memoryEnabled && fullAnswer && fullAnswer.length > 50) {
-        // Run in background to not delay response close (optional, but Express stream ends when we return)
-        storeMemory(effectiveUserId, `Q: ${effectiveQuery}\nA: ${fullAnswer}`, {
+    // Save to Memory (authenticated users only)
+    if (memoryEnabled && userId && fullAnswer && fullAnswer.length > 50) {
+        storeMemory(userId, `Q: ${effectiveQuery}\nA: ${fullAnswer}`, {
             tags: ['conversation', effectiveSearchType],
         }).catch(err => logger.error(`Failed to store memory: ${err.message}`, CONTEXT));
     }

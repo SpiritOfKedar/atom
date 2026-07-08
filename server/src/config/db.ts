@@ -19,3 +19,10 @@ mongoose.connection.on('disconnected', () => {
 mongoose.connection.on('error', (err) => {
     logger.error('MongoDB error', 'Database', err);
 });
+
+export const disconnectDB = async (): Promise<void> => {
+    if (mongoose.connection.readyState !== 0) {
+        await mongoose.disconnect();
+        logger.info('MongoDB disconnected', 'Database');
+    }
+};

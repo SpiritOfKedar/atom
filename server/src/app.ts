@@ -1,13 +1,20 @@
 import express, { Application, Request, Response, NextFunction } from 'express';
 import cors from 'cors';
+import helmet from 'helmet';
 import routes from './routes';
-import { env } from './config/env';
+import { env, isProd } from './config/env';
 import { logger } from './utils/logger';
 import { ApiError } from './utils/apiError';
 import { requestIdMiddleware } from './middleware/request-id.middleware';
 import { apiLimiter, chatLimiter } from './middleware/rate-limit.middleware';
 
 const app: Application = express();
+
+if (isProd) {
+    app.set('trust proxy', 1);
+}
+
+app.use(helmet());
 
 // Middleware
 app.use(cors({

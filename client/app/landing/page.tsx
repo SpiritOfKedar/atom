@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth, useUser, UserButton, SignInButton, SignUpButton } from '@clerk/nextjs';
@@ -16,8 +16,14 @@ import {
     Microscope,
     Scale,
     Palette,
+    ChevronDown,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { ModelSelector } from '@/components/model-selector';
+import {
+    DEFAULT_MODEL_PROVIDER,
+    ModelProvider,
+} from '@/lib/models';
 
 const EXAMPLE_QUERIES = [
     'What are the latest breakthroughs in quantum computing?',
@@ -36,63 +42,42 @@ const USE_CASES = [
     { icon: Palette, label: 'Creative', query: 'Generate ideas for ' },
 ];
 
-// Floating particles component
-function Particles() {
-    return (
-        <div className="absolute inset-0 overflow-hidden pointer-events-none">
-            {Array.from({ length: 40 }).map((_, i) => (
-                <div
-                    key={i}
-                    className="absolute w-[2px] h-[2px] rounded-full bg-emerald-400/40"
-                    style={{
-                        left: `${Math.random() * 100}%`,
-                        top: `${Math.random() * 100}%`,
-                        animation: `float-particle ${8 + Math.random() * 12}s ease-in-out infinite`,
-                        animationDelay: `${Math.random() * 10}s`,
-                        opacity: 0.2 + Math.random() * 0.5,
-                    }}
-                />
-            ))}
-        </div>
-    );
-}
-
-// Orbital rings around the hero
-function OrbitalRings() {
-    return (
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none">
-            {[280, 380, 500].map((size, i) => (
-                <div
-                    key={size}
-                    className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full border border-emerald-500/[0.06]"
-                    style={{
-                        width: `${size}px`,
-                        height: `${size}px`,
-                        animation: `spin-slow ${30 + i * 15}s linear infinite${i % 2 ? ' reverse' : ''}`,
-                    }}
-                >
-                    <div
-                        className="absolute w-1.5 h-1.5 rounded-full bg-emerald-400/60 shadow-lg shadow-emerald-400/30"
-                        style={{ top: '0%', left: '50%', transform: 'translate(-50%, -50%)' }}
-                    />
-                </div>
-            ))}
-        </div>
-    );
-}
+const FEATURES = [
+    {
+        icon: Globe,
+        title: 'Real-time search',
+        desc: 'Every answer is backed by live web sources, not stale training data.',
+        gradient: 'from-sky-400 to-blue-600',
+    },
+    {
+        icon: Sparkles,
+        title: 'Nine models, one box',
+        desc: 'GLM, DeepSeek, Nemotron, GPT, Claude, Gemini and more — switch mid-conversation.',
+        gradient: 'from-emerald-400 to-teal-600',
+    },
+    {
+        icon: Shield,
+        title: 'Verified answers',
+        desc: 'Built-in hallucination detection validates every response against its sources.',
+        gradient: 'from-violet-400 to-purple-600',
+    },
+];
 
 export default function LandingPage() {
     const router = useRouter();
     const { isSignedIn } = useAuth();
     const { user } = useUser();
     const [searchQuery, setSearchQuery] = useState('');
-    const [modelProvider, setModelProvider] = useState<'openai' | 'claude' | 'gemini'>('claude');
+    const [modelProvider, setModelProvider] = useState<ModelProvider>(DEFAULT_MODEL_PROVIDER);
     const [placeholderIndex, setPlaceholderIndex] = useState(0);
     const [displayedPlaceholder, setDisplayedPlaceholder] = useState('');
     const [isTyping, setIsTyping] = useState(true);
     const [mounted, setMounted] = useState(false);
 
-    useEffect(() => setMounted(true), []);
+    useEffect(() => {
+        const raf = requestAnimationFrame(() => setMounted(true));
+        return () => cancelAnimationFrame(raf);
+    }, []);
 
     // Typewriter effect
     useEffect(() => {
@@ -114,8 +99,11 @@ export default function LandingPage() {
                 }, 15);
                 return () => clearTimeout(timeout);
             } else {
-                setPlaceholderIndex((prev) => (prev + 1) % EXAMPLE_QUERIES.length);
-                setIsTyping(true);
+                const timeout = setTimeout(() => {
+                    setPlaceholderIndex((prev) => (prev + 1) % EXAMPLE_QUERIES.length);
+                    setIsTyping(true);
+                }, 120);
+                return () => clearTimeout(timeout);
             }
         }
     }, [displayedPlaceholder, isTyping, placeholderIndex]);
@@ -128,345 +116,242 @@ export default function LandingPage() {
     };
 
     return (
-        <div className="min-h-screen bg-[#040404] relative overflow-hidden">
-            {/* === CSS Animations === */}
-            <style jsx global>{`
-                @keyframes float-particle {
-                    0%, 100% { transform: translateY(0) translateX(0); }
-                    25% { transform: translateY(-20px) translateX(10px); }
-                    50% { transform: translateY(-10px) translateX(-10px); }
-                    75% { transform: translateY(-30px) translateX(5px); }
-                }
-                @keyframes spin-slow {
-                    from { transform: translate(-50%, -50%) rotate(0deg); }
-                    to { transform: translate(-50%, -50%) rotate(360deg); }
-                }
-                @keyframes aurora {
-                    0% { transform: rotate(0deg) scale(1); opacity: 0.3; }
-                    33% { transform: rotate(120deg) scale(1.1); opacity: 0.5; }
-                    66% { transform: rotate(240deg) scale(0.9); opacity: 0.3; }
-                    100% { transform: rotate(360deg) scale(1); opacity: 0.3; }
-                }
-                @keyframes border-rotate {
-                    from { --angle: 0deg; }
-                    to { --angle: 360deg; }
-                }
-                @keyframes fade-up {
-                    from { opacity: 0; transform: translateY(24px); }
-                    to { opacity: 1; transform: translateY(0); }
-                }
-                @keyframes shimmer {
-                    0% { background-position: -200% center; }
-                    100% { background-position: 200% center; }
-                }
-                @keyframes pulse-ring {
-                    0% { transform: scale(1); opacity: 0.4; }
-                    50% { transform: scale(1.05); opacity: 0.2; }
-                    100% { transform: scale(1); opacity: 0.4; }
-                }
-                .animate-fade-up {
-                    animation: fade-up 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-                    opacity: 0;
-                }
-                .delay-100 { animation-delay: 0.1s; }
-                .delay-200 { animation-delay: 0.2s; }
-                .delay-300 { animation-delay: 0.3s; }
-                .delay-400 { animation-delay: 0.4s; }
-                .delay-500 { animation-delay: 0.5s; }
-                .delay-600 { animation-delay: 0.6s; }
-                .delay-700 { animation-delay: 0.7s; }
-            `}</style>
-
-            {/* === Aurora Background === */}
-            <div className="fixed inset-0 pointer-events-none overflow-hidden">
-                <div
-                    className="absolute top-[-40%] left-[-10%] w-[800px] h-[800px] rounded-full"
-                    style={{
-                        background: 'radial-gradient(circle, rgba(16,185,129,0.12) 0%, transparent 70%)',
-                        animation: 'aurora 20s ease-in-out infinite',
-                    }}
-                />
-                <div
-                    className="absolute top-[-20%] right-[-10%] w-[600px] h-[600px] rounded-full"
-                    style={{
-                        background: 'radial-gradient(circle, rgba(52,211,153,0.08) 0%, transparent 70%)',
-                        animation: 'aurora 25s ease-in-out infinite reverse',
-                    }}
-                />
-                <div
-                    className="absolute bottom-[-30%] left-[20%] w-[700px] h-[700px] rounded-full"
-                    style={{
-                        background: 'radial-gradient(circle, rgba(5,150,105,0.06) 0%, transparent 70%)',
-                        animation: 'aurora 30s ease-in-out infinite',
-                        animationDelay: '5s',
-                    }}
-                />
-                {/* Noise texture overlay */}
-                <div className="absolute inset-0 opacity-[0.015]" style={{
-                    backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='1'/%3E%3C/svg%3E")`,
-                    backgroundRepeat: 'repeat',
-                    backgroundSize: '128px 128px',
-                }} />
-                <Particles />
-            </div>
-
-            {/* === Nav === */}
-            <header className="relative z-30 border-b border-white/[0.04] backdrop-blur-md bg-black/20">
-                <div className="max-w-6xl mx-auto px-6 flex items-center justify-between h-16">
-                    <Link href="/landing" className="flex items-center gap-2.5 group">
-                        <img src="/atom-logo.png" alt="Atom" className="w-8 h-8 rounded-lg transition-transform group-hover:scale-110" />
-                        <span className="text-lg font-bold text-white tracking-tight">Atom</span>
-                    </Link>
-
-                    <nav className="hidden md:flex items-center gap-8">
-                        {['Discover', 'Chat'].map((item) => (
-                            <Link
-                                key={item}
-                                href={`/${item.toLowerCase()}`}
-                                className="text-sm text-slate-400 hover:text-white transition-colors relative group"
-                            >
-                                {item}
-                                <span className="absolute -bottom-1 left-0 w-0 h-px bg-emerald-400 group-hover:w-full transition-all duration-300" />
-                            </Link>
-                        ))}
-                    </nav>
-
-                    <div className="flex items-center gap-3">
-                        {isSignedIn ? (
-                            <div className="flex items-center gap-3">
-                                <span className="text-sm text-slate-400 hidden sm:block">
-                                    {user?.firstName || user?.username}
-                                </span>
-                                <UserButton
-                                    afterSignOutUrl="/landing"
-                                    appearance={{ elements: { avatarBox: 'w-8 h-8 ring-2 ring-emerald-500/30' } }}
-                                />
-                            </div>
-                        ) : (
-                            <>
-                                <SignInButton mode="modal">
-                                    <button className="text-sm text-slate-400 hover:text-white transition-colors">
-                                        Log in
-                                    </button>
-                                </SignInButton>
-                                <SignUpButton mode="modal">
-                                    <button className="relative text-sm font-medium text-white px-4 py-2 rounded-lg overflow-hidden group">
-                                        <div className="absolute inset-0 bg-gradient-to-r from-emerald-600 to-green-600 transition-all group-hover:from-emerald-500 group-hover:to-green-500" />
-                                        <span className="relative">Sign up</span>
-                                    </button>
-                                </SignUpButton>
-                            </>
-                        )}
-                    </div>
+        <div className="min-h-screen bg-background overflow-x-clip">
+            {/* ============ HERO ============ */}
+            <section className="relative min-h-[100svh] flex flex-col">
+                {/* Wallpaper with slow Ken Burns drift */}
+                <div className="absolute inset-0 overflow-hidden">
+                    <div
+                        className="absolute inset-0 bg-cover bg-center animate-slow-zoom"
+                        style={{ backgroundImage: "url('/wallpaper.png')" }}
+                    />
+                    {/* Readability + blend overlays */}
+                    <div className="absolute inset-0 bg-black/25" />
+                    <div className="absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-black/70 to-transparent" />
+                    <div className="absolute inset-x-0 bottom-0 h-[45%] bg-gradient-to-t from-background via-background/70 to-transparent" />
                 </div>
-            </header>
 
-            {/* === Hero === */}
-            <main className="relative z-10">
-                <div className="max-w-4xl mx-auto px-6 pt-28 pb-20 text-center relative">
-                    <OrbitalRings />
-
-                    {/* Badge */}
+                {/* Glass nav */}
+                <header className="relative z-30 mt-5 px-4">
                     <div className={cn(
-                        "inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 mb-10",
+                        "max-w-5xl mx-auto glass rounded-2xl px-5 h-14 flex items-center justify-between",
                         mounted && "animate-fade-up"
                     )}>
-                        <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                        <span className="text-xs font-semibold text-emerald-400 uppercase tracking-wider">
-                            Real-time AI Search
+                        <Link href="/landing" className="flex items-center gap-2.5 group">
+                            <img src="/atom-logo.png" alt="Atom" className="w-8 h-8 rounded-lg transition-transform duration-300 group-hover:rotate-12" />
+                            <span className="text-lg font-bold text-white tracking-tight">Atom</span>
+                        </Link>
+
+                        <nav className="hidden md:flex items-center gap-7">
+                            {['Discover', 'Chat'].map((item) => (
+                                <Link
+                                    key={item}
+                                    href={`/${item.toLowerCase()}`}
+                                    className="relative text-sm text-white/70 hover:text-white transition-colors group"
+                                >
+                                    {item}
+                                    <span className="absolute -bottom-1 left-0 w-0 h-px bg-white/70 group-hover:w-full transition-all duration-300" />
+                                </Link>
+                            ))}
+                        </nav>
+
+                        <div className="flex items-center gap-3">
+                            {isSignedIn ? (
+                                <div className="flex items-center gap-3">
+                                    <span className="text-sm text-white/70 hidden sm:block">
+                                        {user?.firstName || user?.username}
+                                    </span>
+                                    <UserButton afterSignOutUrl="/landing" />
+                                </div>
+                            ) : (
+                                <>
+                                    <SignInButton mode="modal">
+                                        <button className="text-sm text-white/70 hover:text-white transition-colors">
+                                            Log in
+                                        </button>
+                                    </SignInButton>
+                                    <SignUpButton mode="modal">
+                                        <button className="text-sm font-medium text-black bg-white hover:bg-white/90 px-4 py-2 rounded-xl transition-all duration-200 hover:scale-[1.03] active:scale-[0.98]">
+                                            Sign up
+                                        </button>
+                                    </SignUpButton>
+                                </>
+                            )}
+                        </div>
+                    </div>
+                </header>
+
+                {/* Hero content */}
+                <div className="relative z-20 flex-1 flex flex-col items-center justify-center px-6 pb-24 pt-10 text-center">
+                    <div className={cn(
+                        "inline-flex items-center gap-2 px-4 py-1.5 rounded-full glass-light mb-8",
+                        mounted && "animate-fade-up delay-100"
+                    )}>
+                        <span className="relative flex w-2 h-2">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-brand opacity-60" />
+                            <span className="relative inline-flex rounded-full w-2 h-2 bg-brand" />
                         </span>
+                        <span className="text-xs font-medium text-white/85 tracking-wide">Real-time AI search</span>
                     </div>
 
-                    {/* Headline */}
-                    <h1 className={cn("text-6xl md:text-8xl font-bold tracking-tighter mb-8", mounted && "animate-fade-up delay-100")}>
-                        <span className="text-white block">Search smarter.</span>
-                        <span
-                            className="block mt-2 bg-clip-text text-transparent"
-                            style={{
-                                backgroundImage: 'linear-gradient(135deg, #34d399 0%, #6ee7b7 25%, #a7f3d0 50%, #6ee7b7 75%, #34d399 100%)',
-                                backgroundSize: '200% auto',
-                                animation: 'shimmer 4s linear infinite',
-                            }}
-                        >
+                    <h1 className={cn(
+                        "text-5xl md:text-7xl lg:text-8xl font-bold tracking-tight mb-6",
+                        mounted && "animate-fade-up delay-200"
+                    )}>
+                        <span className="text-white [text-shadow:0_4px_30px_rgba(0,0,0,0.45)]">Search smarter.</span>
+                        <br />
+                        <span className="bg-gradient-to-r from-sky-200 via-emerald-200 to-sky-200 bg-clip-text text-transparent animate-gradient-x [filter:drop-shadow(0_4px_24px_rgba(0,0,0,0.4))]">
                             Know more.
                         </span>
                     </h1>
 
                     <p className={cn(
-                        "text-lg md:text-xl text-slate-400 max-w-xl mx-auto mb-14 leading-relaxed",
-                        mounted && "animate-fade-up delay-200"
+                        "text-lg md:text-xl text-white/75 max-w-xl mx-auto mb-12 leading-relaxed [text-shadow:0_2px_16px_rgba(0,0,0,0.5)]",
+                        mounted && "animate-fade-up delay-300"
                     )}>
-                        AI-powered answers with real sources. Search the web, get cited responses,
-                        and explore any topic in depth.
+                        AI-powered answers with real sources. Search the web, get cited
+                        responses, and explore any topic in depth.
                     </p>
 
-                    {/* === Search box with animated border === */}
-                    <div className={cn("max-w-2xl mx-auto mb-8", mounted && "animate-fade-up delay-300")}>
+                    {/* Glass search box */}
+                    <div className={cn("w-full max-w-2xl mx-auto mb-8", mounted && "animate-fade-up delay-400")}>
                         <form onSubmit={handleSearch}>
-                            <div className="relative group">
-                                {/* Animated glow ring */}
-                                <div
-                                    className="absolute -inset-[1px] rounded-2xl opacity-0 group-focus-within:opacity-100 transition-opacity duration-700"
-                                    style={{
-                                        background: 'conic-gradient(from var(--angle, 0deg), transparent 0%, #10b981 10%, transparent 20%, #34d399 30%, transparent 40%)',
-                                        animation: 'border-rotate 4s linear infinite',
-                                        filter: 'blur(2px)',
-                                    }}
-                                />
-                                {/* Outer glow */}
-                                <div className="absolute -inset-4 rounded-3xl bg-emerald-500/[0.04] opacity-0 group-focus-within:opacity-100 blur-2xl transition-opacity duration-700" />
+                            <div className={cn(
+                                "group glass rounded-2xl overflow-visible text-left transition-all duration-300",
+                                "shadow-[0_20px_60px_-15px_rgba(0,0,0,0.6)]",
+                                "focus-within:border-white/25 focus-within:shadow-[0_20px_70px_-10px_rgba(0,0,0,0.7)] focus-within:-translate-y-0.5"
+                            )}>
+                                <div className="flex items-center">
+                                    <Search className="ml-5 w-5 h-5 text-white/50 group-focus-within:text-brand transition-colors shrink-0" />
+                                    <input
+                                        type="text"
+                                        value={searchQuery}
+                                        onChange={(e) => setSearchQuery(e.target.value)}
+                                        placeholder={displayedPlaceholder + '|'}
+                                        className="flex-1 px-4 py-5 bg-transparent text-white text-lg placeholder:text-white/40 focus:outline-none"
+                                    />
+                                    <button
+                                        type="submit"
+                                        disabled={!searchQuery.trim()}
+                                        className={cn(
+                                            "mr-3 p-2.5 rounded-xl transition-all duration-200 shrink-0",
+                                            searchQuery.trim()
+                                                ? "bg-brand text-brand-foreground hover:scale-110 active:scale-95 shadow-lg shadow-brand/30"
+                                                : "bg-white/10 text-white/40"
+                                        )}
+                                    >
+                                        <ArrowRight className="w-5 h-5" />
+                                    </button>
+                                </div>
 
-                                <div className="relative bg-[#0a0a0a]/90 backdrop-blur-2xl border border-white/[0.06] rounded-2xl overflow-hidden focus-within:border-emerald-500/20 transition-all">
-                                    <div className="flex items-center">
-                                        <Search className="ml-5 w-5 h-5 text-slate-600 group-focus-within:text-emerald-400 transition-colors shrink-0" />
-                                        <input
-                                            type="text"
-                                            value={searchQuery}
-                                            onChange={(e) => setSearchQuery(e.target.value)}
-                                            placeholder={displayedPlaceholder + '|'}
-                                            className="flex-1 px-4 py-5 bg-transparent text-white text-lg placeholder:text-slate-700 focus:outline-none"
-                                        />
-                                        <button
-                                            type="submit"
-                                            disabled={!searchQuery.trim()}
-                                            className={cn(
-                                                "mr-3 p-2.5 rounded-xl transition-all shrink-0",
-                                                searchQuery.trim()
-                                                    ? "bg-emerald-500 hover:bg-emerald-400 text-white shadow-lg shadow-emerald-500/30 hover:shadow-emerald-400/40 hover:scale-105"
-                                                    : "bg-white/[0.04] text-slate-700"
-                                            )}
-                                        >
-                                            <ArrowRight className="w-5 h-5" />
-                                        </button>
+                                <div className="flex items-center justify-between px-4 pb-3 pt-0.5 border-t border-white/[0.07]">
+                                    <div className="pt-2.5">
+                                        <ModelSelector modelProvider={modelProvider} onChange={setModelProvider} />
                                     </div>
-
-                                    {/* Model selector */}
-                                    <div className="flex items-center justify-between px-5 pb-3.5 pt-0.5">
-                                        <div className="flex items-center gap-1">
-                                            {(['claude', 'openai', 'gemini'] as const).map((p) => (
-                                                <button
-                                                    key={p}
-                                                    type="button"
-                                                    onClick={() => setModelProvider(p)}
-                                                    className={cn(
-                                                        "px-3 py-1 rounded-lg text-xs font-medium transition-all",
-                                                        modelProvider === p
-                                                            ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/25 shadow-sm shadow-emerald-500/10"
-                                                            : "text-slate-600 hover:text-slate-400 hover:bg-white/[0.03]"
-                                                    )}
-                                                >
-                                                    {p === 'openai' ? 'GPT-4o' : p === 'claude' ? 'Claude' : 'Gemini'}
-                                                </button>
-                                            ))}
-                                        </div>
-                                        <span className="text-[11px] text-slate-700">
-                                            Powered by {modelProvider === 'openai' ? 'OpenAI' : modelProvider === 'claude' ? 'Anthropic' : 'Google'}
-                                        </span>
-                                    </div>
+                                    <span className="text-[11px] text-white/35 pt-2.5">
+                                        Press Enter to search
+                                    </span>
                                 </div>
                             </div>
                         </form>
                     </div>
 
-                    {/* Quick links */}
+                    {/* Use-case chips over the hero */}
                     <div className={cn(
-                        "flex items-center justify-center gap-6 mb-24",
-                        mounted && "animate-fade-up delay-400"
+                        "flex flex-wrap items-center justify-center gap-2 max-w-2xl",
+                        mounted && "animate-fade-up delay-500"
                     )}>
-                        {isSignedIn && (
-                            <Link
-                                href="/chat"
-                                className="text-sm text-slate-500 hover:text-emerald-400 transition-colors group flex items-center gap-1"
-                            >
-                                Your conversations
-                                <ArrowRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
-                            </Link>
-                        )}
-                        <Link
-                            href="/discover"
-                            className="text-sm text-slate-500 hover:text-emerald-400 transition-colors group flex items-center gap-1"
-                        >
-                            Discover trending
-                            <ArrowRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
-                        </Link>
-                    </div>
-                </div>
-
-                {/* === Use cases === */}
-                <div className={cn("max-w-4xl mx-auto px-6 mb-20", mounted && "animate-fade-up delay-500")}>
-                    <div className="flex items-center gap-3 mb-8">
-                        <h2 className="text-xs font-semibold text-slate-600 uppercase tracking-[0.2em]">Try it for</h2>
-                        <div className="flex-1 h-px bg-gradient-to-r from-white/[0.06] to-transparent" />
-                    </div>
-                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
                         {USE_CASES.map((uc) => (
                             <button
                                 key={uc.label}
                                 onClick={() => setSearchQuery(uc.query)}
-                                className="group relative flex flex-col items-center gap-3 p-5 rounded-2xl bg-white/[0.015] border border-white/[0.04] hover:border-emerald-500/20 transition-all duration-300 hover:-translate-y-1"
+                                className="flex items-center gap-2 px-4 py-2 rounded-full glass-light text-sm text-white/70
+                                    hover:text-white hover:bg-white/12 hover:-translate-y-0.5
+                                    transition-all duration-200"
                             >
-                                <div className="absolute inset-0 rounded-2xl bg-gradient-to-b from-emerald-500/[0.04] to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                                <div className="relative w-10 h-10 rounded-xl bg-white/[0.03] group-hover:bg-emerald-500/10 flex items-center justify-center transition-all duration-300">
-                                    <uc.icon className="w-5 h-5 text-slate-600 group-hover:text-emerald-400 transition-colors duration-300" />
-                                </div>
-                                <span className="relative text-xs font-medium text-slate-500 group-hover:text-white transition-colors duration-300">
-                                    {uc.label}
-                                </span>
+                                <uc.icon className="w-3.5 h-3.5" />
+                                {uc.label}
                             </button>
                         ))}
                     </div>
+
+                    {/* Scroll cue */}
+                    <div className={cn(
+                        "absolute bottom-6 left-1/2 -translate-x-1/2 text-white/40 animate-float-soft",
+                        mounted && "animate-fade-up delay-600"
+                    )}>
+                        <ChevronDown className="w-5 h-5" />
+                    </div>
+                </div>
+            </section>
+
+            {/* ============ BELOW THE FOLD ============ */}
+            <main className="relative z-10">
+                {/* Soft ambient glow behind cards */}
+                <div className="pointer-events-none absolute inset-x-0 top-0 h-[500px] overflow-hidden">
+                    <div className="absolute left-1/2 top-24 -translate-x-1/2 w-[700px] h-[300px] rounded-full bg-brand/[0.05] blur-3xl" />
                 </div>
 
-                {/* === Feature cards === */}
-                <div className={cn("max-w-5xl mx-auto px-6 pb-28", mounted && "animate-fade-up delay-600")}>
+                {/* Quick links */}
+                <div className="max-w-5xl mx-auto px-6 pt-16 pb-4 flex items-center justify-center gap-8">
+                    {isSignedIn && (
+                        <Link
+                            href="/chat"
+                            className="text-sm text-muted-foreground hover:text-foreground transition-colors group flex items-center gap-1.5"
+                        >
+                            Your conversations
+                            <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
+                        </Link>
+                    )}
+                    <Link
+                        href="/discover"
+                        className="text-sm text-muted-foreground hover:text-foreground transition-colors group flex items-center gap-1.5"
+                    >
+                        Discover trending
+                        <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
+                    </Link>
+                </div>
+
+                {/* Feature cards */}
+                <div className="max-w-5xl mx-auto px-6 pt-12 pb-28 relative">
+                    <div className="flex items-center gap-3 mb-8">
+                        <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-[0.2em]">Why Atom</h2>
+                        <div className="flex-1 h-px bg-gradient-to-r from-border to-transparent" />
+                    </div>
                     <div className="grid md:grid-cols-3 gap-5">
-                        {[
-                            {
-                                icon: Globe,
-                                title: 'Real-time Search',
-                                desc: 'Every answer is backed by live web sources — not stale training data.',
-                                gradient: 'from-emerald-500/20 to-teal-500/20',
-                            },
-                            {
-                                icon: Sparkles,
-                                title: 'Multi-Model AI',
-                                desc: 'Switch between GPT-4o, Claude, and Gemini. Pick the best model for your question.',
-                                gradient: 'from-green-500/20 to-emerald-500/20',
-                            },
-                            {
-                                icon: Shield,
-                                title: 'Verified Answers',
-                                desc: 'Built-in hallucination detection validates every response against its sources.',
-                                gradient: 'from-teal-500/20 to-cyan-500/20',
-                            },
-                        ].map((feature) => (
+                        {FEATURES.map((feature) => (
                             <div
                                 key={feature.title}
-                                className="group relative p-7 rounded-2xl bg-white/[0.015] border border-white/[0.04] hover:border-emerald-500/15 transition-all duration-500 hover:-translate-y-1"
+                                className="group relative p-7 rounded-2xl glass overflow-hidden
+                                    transition-all duration-300 hover:-translate-y-1.5 hover:border-white/20
+                                    hover:shadow-[0_24px_60px_-20px_rgba(0,0,0,0.7)]"
                             >
-                                {/* Hover gradient backdrop */}
+                                {/* Gradient sheen on hover */}
                                 <div className={cn(
-                                    "absolute inset-0 rounded-2xl bg-gradient-to-br opacity-0 group-hover:opacity-100 transition-opacity duration-500",
+                                    "absolute -top-24 -right-24 w-48 h-48 rounded-full bg-gradient-to-br opacity-0 blur-3xl",
+                                    "group-hover:opacity-15 transition-opacity duration-500",
                                     feature.gradient
                                 )} />
-                                <div className="relative">
-                                    <div className="w-11 h-11 rounded-xl bg-emerald-500/10 flex items-center justify-center mb-5 group-hover:bg-emerald-500/20 group-hover:shadow-lg group-hover:shadow-emerald-500/10 transition-all duration-500">
-                                        <feature.icon className="w-5 h-5 text-emerald-400" />
-                                    </div>
-                                    <h3 className="text-white font-semibold mb-2.5 text-[15px]">{feature.title}</h3>
-                                    <p className="text-sm text-slate-500 leading-relaxed group-hover:text-slate-400 transition-colors">{feature.desc}</p>
+                                <div className={cn(
+                                    "relative w-11 h-11 rounded-xl bg-gradient-to-br flex items-center justify-center mb-5",
+                                    "shadow-lg transition-transform duration-300 group-hover:scale-110 group-hover:rotate-3",
+                                    feature.gradient
+                                )}>
+                                    <feature.icon className="w-5 h-5 text-white" />
                                 </div>
+                                <h3 className="relative text-foreground font-semibold mb-2.5 text-[15px]">{feature.title}</h3>
+                                <p className="relative text-sm text-muted-foreground leading-relaxed">{feature.desc}</p>
                             </div>
                         ))}
                     </div>
                 </div>
             </main>
 
-            {/* === Footer === */}
-            <footer className="relative z-10 border-t border-white/[0.03] py-8">
+            {/* ============ FOOTER ============ */}
+            <footer className="border-t border-border py-8">
                 <div className="max-w-6xl mx-auto px-6 flex items-center justify-between">
-                    <span className="text-xs text-slate-700">© 2025 Atom</span>
-                    <span className="text-xs text-slate-700">Built with ❤️ and too much caffeine</span>
+                    <span className="text-xs text-muted-foreground">© 2026 Atom</span>
+                    <span className="text-xs text-muted-foreground">Search the world, beautifully</span>
                 </div>
             </footer>
         </div>

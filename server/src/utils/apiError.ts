@@ -20,4 +20,12 @@ export class ApiError extends Error {
     static internal(message: string = 'Internal Server Error'): ApiError {
         return new ApiError(message, 500, false);
     }
+
+    static tooManyRequests(message: string = 'Too Many Requests'): ApiError {
+        return new ApiError(message, 429);
+    }
+
+    static serviceUnavailable(message: string = 'Service Unavailable'): ApiError {
+        return new ApiError(message, 503);
+    }
 }

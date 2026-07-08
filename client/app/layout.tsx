@@ -1,19 +1,15 @@
 import type { Metadata } from "next";
-import { Alan_Sans } from "next/font/google";
 import { ClerkProvider } from "@clerk/nextjs";
 import { dark } from "@clerk/themes";
 import "./globals.css";
-
-const alanSans = Alan_Sans({
-  variable: "--font-alan-sans",
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-});
 
 export const metadata: Metadata = {
   title: "Atom - AI Search",
   description: "An AI-powered search engine with real-time answers and source citations",
 };
+
+// Clerk requires runtime env; avoid static prerender failures in CI without real keys
+export const dynamic = 'force-dynamic';
 
 export default function RootLayout({
   children,
@@ -26,18 +22,25 @@ export default function RootLayout({
         baseTheme: dark,
         variables: {
           colorPrimary: "#10b981",
-          colorBackground: "#0f172a",
+          colorBackground: "#141414",
         },
       }}
     >
       <html lang="en" className="dark">
-        <body
-          className={`${alanSans.variable} ${alanSans.className} antialiased`}
-        >
-          {children}
-        </body>
+        <head>
+          <link rel="preconnect" href="https://fonts.googleapis.com" />
+          <link
+            rel="preconnect"
+            href="https://fonts.gstatic.com"
+            crossOrigin="anonymous"
+          />
+          <link
+            href="https://fonts.googleapis.com/css2?family=Alan+Sans:wght@400;500;600;700&display=swap"
+            rel="stylesheet"
+          />
+        </head>
+        <body className="font-sans antialiased">{children}</body>
       </html>
     </ClerkProvider>
   );
 }
-

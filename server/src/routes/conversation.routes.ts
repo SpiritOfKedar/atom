@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { Request, Response } from 'express';
 import { requireAuth, AuthenticatedRequest } from '../middleware/auth.middleware';
+import { validateObjectIdParam } from '../middleware/validate-object-id.middleware';
 import * as conversationService from '../services/conversation.service';
 import { logger } from '../utils/logger';
 
@@ -17,7 +18,7 @@ router.get('/', requireAuth, async (req: AuthenticatedRequest, res: Response) =>
     }
 });
 
-router.get('/:id', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+router.get('/:id', requireAuth, validateObjectIdParam(), async (req: AuthenticatedRequest, res: Response) => {
     try {
         const conversation = await conversationService.getConversationById(
             req.params.id as string,
@@ -58,7 +59,7 @@ router.post('/', requireAuth, async (req: AuthenticatedRequest, res: Response) =
     }
 });
 
-router.post('/:id/messages', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+router.post('/:id/messages', requireAuth, validateObjectIdParam(), async (req: AuthenticatedRequest, res: Response) => {
     try {
         const { role, content, sources } = req.body;
 
@@ -85,7 +86,7 @@ router.post('/:id/messages', requireAuth, async (req: AuthenticatedRequest, res:
     }
 });
 
-router.patch('/:id', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+router.patch('/:id', requireAuth, validateObjectIdParam(), async (req: AuthenticatedRequest, res: Response) => {
     try {
         const { title } = req.body;
 
@@ -112,7 +113,7 @@ router.patch('/:id', requireAuth, async (req: AuthenticatedRequest, res: Respons
     }
 });
 
-router.delete('/:id', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+router.delete('/:id', requireAuth, validateObjectIdParam(), async (req: AuthenticatedRequest, res: Response) => {
     try {
         const deleted = await conversationService.deleteConversation(
             req.params.id as string,

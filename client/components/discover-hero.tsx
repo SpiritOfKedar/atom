@@ -2,7 +2,6 @@
 
 import React from 'react';
 import { ArrowRight } from "lucide-react";
-import { cn } from "@/lib/utils";
 
 interface DiscoverHeroProps {
     title: string;
@@ -44,9 +43,9 @@ export function DiscoverHero({
 
             {/* Top badge */}
             <div className="absolute top-5 left-5 z-10">
-                <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/20 backdrop-blur-md border border-emerald-500/30">
-                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                    <span className="text-[11px] font-semibold text-emerald-300 uppercase tracking-wider">Top Story</span>
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-brand/20 backdrop-blur-md border border-brand/30">
+                    <div className="w-1.5 h-1.5 rounded-full bg-brand animate-pulse" />
+                    <span className="text-[11px] font-semibold text-brand uppercase tracking-wider">Top Story</span>
                 </div>
             </div>
 
@@ -76,7 +75,7 @@ export function DiscoverHero({
                     )}
 
                     {/* CTA */}
-                    <div className="flex items-center gap-2 text-emerald-400 text-sm font-medium opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-300">
+                    <div className="flex items-center gap-2 text-brand text-sm font-medium opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-300">
                         <span>Explore with Atom</span>
                         <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
                     </div>

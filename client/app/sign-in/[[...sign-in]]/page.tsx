@@ -5,37 +5,28 @@ import { SignIn } from '@clerk/nextjs';
 export default function SignInPage() {
     return (
         <div className="min-h-screen relative flex items-center justify-center">
-            {/* Background Image */}
+            {/* Wallpaper backdrop */}
             <div
-                className="fixed inset-0 bg-cover bg-center bg-no-repeat"
-                style={{ backgroundImage: "url('/back_for_proj.jpg')" }}
+                className="fixed inset-0 bg-cover bg-center"
+                style={{ backgroundImage: "url('/wallpaper.png')" }}
             />
-            {/* Dark overlay for readability */}
-            <div className="fixed inset-0 bg-black/60 backdrop-blur-[2px]" />
+            <div className="fixed inset-0 bg-black/55 backdrop-blur-[3px]" />
 
-            {/* Ambient background effects - forest inspired */}
-            <div className="fixed inset-0 overflow-hidden pointer-events-none">
-                <div className="absolute top-0 left-1/4 w-96 h-96 bg-emerald-500/10 rounded-full blur-3xl" />
-                <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-green-500/10 rounded-full blur-3xl" />
-                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-lime-500/5 rounded-full blur-3xl" />
-            </div>
-
-            {/* Sign In Component */}
-            <div className="relative z-10">
+            <div className="relative z-10 animate-fade-up">
                 <SignIn
                     appearance={{
                         elements: {
                             rootBox: "mx-auto",
-                            card: "bg-black/40 backdrop-blur-xl border border-emerald-900/30 shadow-2xl shadow-emerald-500/10",
+                            card: "bg-black/50 backdrop-blur-2xl border border-white/10 shadow-2xl shadow-black/50",
                             headerTitle: "text-white",
-                            headerSubtitle: "text-slate-400",
-                            socialButtonsBlockButton: "bg-slate-800/50 border-slate-700 hover:bg-slate-700 text-white",
+                            headerSubtitle: "text-white/60",
+                            socialButtonsBlockButton: "bg-white/[0.06] border-white/10 hover:bg-white/[0.12] text-white transition-colors",
                             socialButtonsBlockButtonText: "text-white",
-                            dividerLine: "bg-emerald-900/30",
-                            dividerText: "text-slate-500",
-                            formFieldLabel: "text-slate-300",
-                            formFieldInput: "bg-slate-900/50 border-slate-700 text-white placeholder:text-slate-500 focus:border-emerald-500 focus:ring-emerald-500/20",
-                            formButtonPrimary: "bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700 shadow-lg shadow-emerald-500/20",
+                            dividerLine: "bg-white/10",
+                            dividerText: "text-white/40",
+                            formFieldLabel: "text-white/70",
+                            formFieldInput: "bg-white/[0.06] border-white/10 text-white placeholder:text-white/35 focus:border-emerald-400/60 focus:ring-emerald-400/20",
+                            formButtonPrimary: "bg-emerald-500 hover:bg-emerald-400 text-black font-semibold shadow-lg shadow-emerald-500/20 transition-all",
                             footerActionLink: "text-emerald-400 hover:text-emerald-300",
                             identityPreviewEditButton: "text-emerald-400 hover:text-emerald-300",
                         },

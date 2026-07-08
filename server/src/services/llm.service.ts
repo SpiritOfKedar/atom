@@ -2,14 +2,18 @@ import OpenAI from 'openai';
 import Anthropic from '@anthropic-ai/sdk';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { Response } from 'express';
-import { AnswerStyle, ModelProvider, RAGContext } from '../types';
+import { AnswerStyle, isNvapiModel, ModelProvider, NVAPI_MODELS, RAGContext } from '../types';
 import { env } from '../config/env';
 import { logger } from '../utils/logger';
 import { IMessage } from '../models/conversation.model';
 
 const CONTEXT = 'LLMService';
 
-export const PROVIDER_MODELS: Record<ModelProvider, string> = {
+const NVIDIA_NIM_BASE_URL = 'https://integrate.api.nvidia.com/v1';
+const DEFAULT_NVAPI_MODEL = NVAPI_MODELS[0];
+
+/** Fixed model IDs for classic providers (nvapi models use the provider id itself). */
+export const PROVIDER_MODELS: Record<'openai' | 'claude' | 'gemini', string> = {
     openai: 'gpt-4o-mini',
     claude: 'claude-3-5-haiku-latest',
     gemini: 'gemini-2.5-flash',
@@ -18,6 +22,7 @@ export const PROVIDER_MODELS: Record<ModelProvider, string> = {
 let openaiClient: OpenAI | null = null;
 let anthropicClient: Anthropic | null = null;
 let geminiClient: GoogleGenerativeAI | null = null;
+let nvidiaClient: OpenAI | null = null;
 
 const getOpenAIClient = (): OpenAI => {
     if (!env.openaiApiKey) {
@@ -49,7 +54,30 @@ const getGeminiClient = (): GoogleGenerativeAI => {
     return geminiClient;
 };
 
+const getNvidiaClient = (): OpenAI => {
+    if (!env.nvidiaApiKey) {
+        throw new Error('NVIDIA_API_KEY is not configured');
+    }
+    if (!nvidiaClient) {
+        nvidiaClient = new OpenAI({
+            apiKey: env.nvidiaApiKey,
+            baseURL: NVIDIA_NIM_BASE_URL,
+        });
+    }
+    return nvidiaClient;
+};
+
+const resolveModelId = (provider: ModelProvider): string => {
+    if (isNvapiModel(provider)) {
+        return provider;
+    }
+    return PROVIDER_MODELS[provider];
+};
+
 export const isProviderConfigured = (provider: ModelProvider): boolean => {
+    if (isNvapiModel(provider)) {
+        return Boolean(env.nvidiaApiKey);
+    }
     switch (provider) {
         case 'openai':
             return Boolean(env.openaiApiKey);
@@ -62,16 +90,24 @@ export const isProviderConfigured = (provider: ModelProvider): boolean => {
     }
 };
 
-export const resolveModelProvider = (preferred: ModelProvider = 'openai'): ModelProvider => {
+export const resolveModelProvider = (preferred: ModelProvider = DEFAULT_NVAPI_MODEL): ModelProvider => {
     if (isProviderConfigured(preferred)) {
         return preferred;
     }
 
-    const fallbackOrder: ModelProvider[] = ['openai', 'claude', 'gemini'];
+    const fallbackOrder: ModelProvider[] = [
+        DEFAULT_NVAPI_MODEL,
+        ...NVAPI_MODELS.filter((m) => m !== DEFAULT_NVAPI_MODEL),
+        'openai',
+        'claude',
+        'gemini',
+    ];
     const fallback = fallbackOrder.find(isProviderConfigured);
 
     if (!fallback) {
-        throw new Error('No LLM provider is configured. Add OPENAI_API_KEY, ANTHROPIC_API_KEY, or GEMINI_API_KEY.');
+        throw new Error(
+            'No LLM provider is configured. Add NVIDIA_API_KEY, OPENAI_API_KEY, ANTHROPIC_API_KEY, or GEMINI_API_KEY.'
+        );
     }
 
     logger.warn(
@@ -89,17 +125,77 @@ interface CompletionOptions {
     maxTokens?: number;
 }
 
-export const completeText = async ({
-    provider = 'openai',
+const isRateLimitOrCapacityError = (error: unknown): boolean => {
+    const err = error as { status?: number; statusCode?: number; code?: string; message?: string };
+    const status = err.status ?? err.statusCode;
+    if (status === 429 || status === 503) return true;
+    const message = (err.message || '').toLowerCase();
+    return (
+        message.includes('resourceexhausted') ||
+        message.includes('rate limit') ||
+        message.includes('too many requests') ||
+        message.includes('worker local total request limit') ||
+        message.includes('capacity')
+    );
+};
+
+/**
+ * Providers to try for a request.
+ * When `skipSiblingNvapi` is set (capacity errors), other NIM models are skipped
+ * because they share the same NVIDIA worker quota.
+ */
+const listFallbackProviders = (
+    primary: ModelProvider,
+    options: { skipSiblingNvapi?: boolean } = {}
+): ModelProvider[] => {
+    const order: ModelProvider[] = [primary];
+
+    if (!options.skipSiblingNvapi || !isNvapiModel(primary)) {
+        order.push(
+            DEFAULT_NVAPI_MODEL,
+            ...NVAPI_MODELS.filter((m) => m !== DEFAULT_NVAPI_MODEL && m !== primary)
+        );
+    }
+
+    order.push('openai', 'claude', 'gemini');
+
+    const seen = new Set<ModelProvider>();
+    const providers: ModelProvider[] = [];
+    for (const candidate of order) {
+        if (seen.has(candidate) || !isProviderConfigured(candidate)) continue;
+        seen.add(candidate);
+        providers.push(candidate);
+    }
+    return providers;
+};
+
+const completeTextWithProvider = async ({
+    provider,
     systemPrompt,
     userPrompt,
     temperature = 0.3,
     maxTokens = 1024,
-}: CompletionOptions): Promise<{ text: string; provider: ModelProvider }> => {
-    const activeProvider = resolveModelProvider(provider);
-    const model = PROVIDER_MODELS[activeProvider];
+}: CompletionOptions & { provider: ModelProvider }): Promise<{ text: string; provider: ModelProvider }> => {
+    const model = resolveModelId(provider);
 
-    switch (activeProvider) {
+    if (isNvapiModel(provider)) {
+        const nvidia = getNvidiaClient();
+        const response = await nvidia.chat.completions.create({
+            model,
+            messages: [
+                { role: 'system', content: systemPrompt },
+                { role: 'user', content: userPrompt },
+            ],
+            temperature,
+            max_tokens: maxTokens,
+        });
+        return {
+            text: response.choices[0]?.message?.content?.trim() || '',
+            provider,
+        };
+    }
+
+    switch (provider) {
         case 'openai': {
             const openai = getOpenAIClient();
             const response = await openai.chat.completions.create({
@@ -113,7 +209,7 @@ export const completeText = async ({
             });
             return {
                 text: response.choices[0]?.message?.content?.trim() || '',
-                provider: activeProvider,
+                provider,
             };
         }
 
@@ -133,7 +229,7 @@ export const completeText = async ({
                 .join('')
                 .trim();
 
-            return { text, provider: activeProvider };
+            return { text, provider };
         }
 
         case 'gemini': {
@@ -150,13 +246,67 @@ export const completeText = async ({
 
             return {
                 text: response.response.text().trim(),
-                provider: activeProvider,
+                provider,
             };
         }
 
         default:
-            throw new Error(`Unsupported model provider: ${activeProvider}`);
+            throw new Error(`Unsupported model provider: ${provider}`);
     }
+};
+
+export const completeText = async ({
+    provider = DEFAULT_NVAPI_MODEL,
+    systemPrompt,
+    userPrompt,
+    temperature = 0.3,
+    maxTokens = 1024,
+}: CompletionOptions): Promise<{ text: string; provider: ModelProvider }> => {
+    const preferred = resolveModelProvider(provider);
+    let candidates = listFallbackProviders(preferred);
+    let lastError: unknown;
+    let skipSiblingNvapi = false;
+
+    while (candidates.length > 0) {
+        const activeProvider = candidates[0];
+        candidates = candidates.slice(1);
+
+        try {
+            return await completeTextWithProvider({
+                provider: activeProvider,
+                systemPrompt,
+                userPrompt,
+                temperature,
+                maxTokens,
+            });
+        } catch (error) {
+            lastError = error;
+
+            if (!isRateLimitOrCapacityError(error)) {
+                throw error;
+            }
+
+            if (isNvapiModel(activeProvider) && !skipSiblingNvapi) {
+                skipSiblingNvapi = true;
+                candidates = listFallbackProviders(preferred, { skipSiblingNvapi: true }).filter(
+                    (p) => p !== activeProvider
+                );
+            }
+
+            if (candidates.length === 0) {
+                throw error;
+            }
+
+            logger.warn(
+                `Provider "${activeProvider}" hit capacity/rate limits, trying "${candidates[0]}"`,
+                CONTEXT
+            );
+        }
+    }
+
+    throw lastError instanceof Error
+        ? lastError
+        : new Error('All LLM providers failed');
 };
 
 /**
@@ -186,7 +336,7 @@ const streamTextChunks = async (
 export const generateStandaloneQuery = async (
     query: string,
     conversationHistory: IMessage[],
-    provider: ModelProvider = 'openai'
+    provider: ModelProvider = DEFAULT_NVAPI_MODEL
 ): Promise<string> => {
     if (!conversationHistory || conversationHistory.length === 0) {
         return query;
@@ -316,7 +466,9 @@ Always include citations [1], [2], etc. to the relevant sources for any factual 
 
 /**
  * Streams a response from the active LLM provider to the Express response object.
- * Uses native streaming APIs for all providers (OpenAI, Claude, Gemini).
+ * Uses native streaming APIs for all providers (NVIDIA NIM, OpenAI, Claude, Gemini).
+ * On NVIDIA capacity / rate-limit errors, retries with another configured provider
+ * before any tokens have been written to the client.
  */
 export const streamCompletion = async (
     query: string,
@@ -325,31 +477,53 @@ export const streamCompletion = async (
     onToken?: (token: string) => void,
     conversationHistory?: IMessage[],
     answerStyle: AnswerStyle = 'detailed',
-    provider: ModelProvider = 'openai'
+    provider: ModelProvider = DEFAULT_NVAPI_MODEL
 ): Promise<string> => {
     const prompt = buildPrompt(query, contexts, conversationHistory, answerStyle);
-    const activeProvider = resolveModelProvider(provider);
-    const model = PROVIDER_MODELS[activeProvider];
+    const preferred = resolveModelProvider(provider);
 
     logger.info(`Streaming completion for query: "${query.substring(0, 50)}..."`, CONTEXT);
     logger.debug(`Context count: ${contexts.length}`, CONTEXT);
-    logger.debug(`Using provider=${activeProvider}, model=${model}`, CONTEXT);
 
-    try {
-        let fullContent = '';
-
-        // Safe write helper to avoid crashes on client disconnect
-        const writeToken = (token: string): void => {
-            try {
-                if (!res.writableEnded) {
-                    res.write(JSON.stringify({ type: 'token', data: token }) + '\n');
-                }
-            } catch {
-                // Client disconnected; we still accumulate fullContent for storage
+    const writeToken = (token: string): void => {
+        try {
+            if (!res.writableEnded) {
+                res.write(JSON.stringify({ type: 'token', data: token }) + '\n');
             }
+        } catch {
+            // Client disconnected; still accumulate fullContent for storage
+        }
+    };
+
+    const streamWithProvider = async (activeProvider: ModelProvider): Promise<string> => {
+        const model = resolveModelId(activeProvider);
+        logger.debug(`Using provider=${activeProvider}, model=${model}`, CONTEXT);
+
+        let fullContent = '';
+        const emit = (content: string) => {
+            fullContent += content;
+            writeToken(content);
+            if (onToken) onToken(content);
         };
 
-        if (activeProvider === 'openai') {
+        if (isNvapiModel(activeProvider)) {
+            const nvidia = getNvidiaClient();
+            const stream = await nvidia.chat.completions.create({
+                model,
+                messages: [
+                    { role: 'system', content: SYSTEM_PROMPT },
+                    { role: 'user', content: prompt },
+                ],
+                stream: true,
+                temperature: 0.3,
+                max_tokens: 2048,
+            });
+
+            for await (const chunk of stream) {
+                const content = chunk.choices[0]?.delta?.content;
+                if (content) emit(content);
+            }
+        } else if (activeProvider === 'openai') {
             const openai = getOpenAIClient();
             const stream = await openai.chat.completions.create({
                 model,
@@ -364,13 +538,7 @@ export const streamCompletion = async (
 
             for await (const chunk of stream) {
                 const content = chunk.choices[0]?.delta?.content;
-                if (content) {
-                    fullContent += content;
-                    writeToken(content);
-                    if (onToken) {
-                        onToken(content);
-                    }
-                }
+                if (content) emit(content);
             }
         } else if (activeProvider === 'claude') {
             const anthropic = getAnthropicClient();
@@ -388,13 +556,7 @@ export const streamCompletion = async (
                     event.delta.type === 'text_delta'
                 ) {
                     const text = event.delta.text;
-                    if (text) {
-                        fullContent += text;
-                        writeToken(text);
-                        if (onToken) {
-                            onToken(text);
-                        }
-                    }
+                    if (text) emit(text);
                 }
             }
         } else if (activeProvider === 'gemini') {
@@ -411,16 +573,9 @@ export const streamCompletion = async (
 
             for await (const chunk of result.stream) {
                 const text = chunk.text();
-                if (text) {
-                    fullContent += text;
-                    writeToken(text);
-                    if (onToken) {
-                        onToken(text);
-                    }
-                }
+                if (text) emit(text);
             }
         } else {
-            // Fallback: complete then chunk
             const completion = await completeText({
                 provider: activeProvider,
                 systemPrompt: SYSTEM_PROMPT,
@@ -432,12 +587,53 @@ export const streamCompletion = async (
             await streamTextChunks(fullContent, res, onToken);
         }
 
-        logger.info(`Streaming completed successfully (${fullContent.length} chars)`, CONTEXT);
         return fullContent;
-    } catch (error: any) {
-        logger.error(`LLM streaming failed: ${error.message}`, CONTEXT, error);
-        throw error;
+    };
+
+    let candidates = listFallbackProviders(preferred);
+    let lastError: unknown;
+    let skipSiblingNvapi = false;
+
+    while (candidates.length > 0) {
+        const activeProvider = candidates[0];
+        candidates = candidates.slice(1);
+
+        try {
+            const fullContent = await streamWithProvider(activeProvider);
+            logger.info(
+                `Streaming completed successfully via ${activeProvider} (${fullContent.length} chars)`,
+                CONTEXT
+            );
+            return fullContent;
+        } catch (error: any) {
+            lastError = error;
+
+            if (!isRateLimitOrCapacityError(error)) {
+                logger.error(`LLM streaming failed: ${error.message}`, CONTEXT, error);
+                throw error;
+            }
+
+            // NIM models share one worker pool — don't hop DeepSeek → GLM on the same 503.
+            if (isNvapiModel(activeProvider) && !skipSiblingNvapi) {
+                skipSiblingNvapi = true;
+                candidates = listFallbackProviders(preferred, { skipSiblingNvapi: true }).filter(
+                    (p) => p !== activeProvider
+                );
+            }
+
+            if (candidates.length === 0) {
+                logger.error(`LLM streaming failed: ${error.message}`, CONTEXT, error);
+                throw error;
+            }
+
+            logger.warn(
+                `Provider "${activeProvider}" hit capacity/rate limits during streaming, trying "${candidates[0]}"`,
+                CONTEXT
+            );
+        }
     }
+
+    throw lastError instanceof Error ? lastError : new Error('All LLM providers failed to stream');
 };
 
 /**
@@ -447,7 +643,7 @@ export const getCompletion = async (
     query: string,
     contexts: RAGContext[],
     answerStyle: AnswerStyle = 'detailed',
-    provider: ModelProvider = 'openai'
+    provider: ModelProvider = DEFAULT_NVAPI_MODEL
 ): Promise<string> => {
     const prompt = buildPrompt(query, contexts, undefined, answerStyle);
 
@@ -474,7 +670,7 @@ export const generateFollowUpQuestions = async (
     query: string,
     answer: string,
     sources: RAGContext[],
-    provider: ModelProvider = 'openai'
+    provider: ModelProvider = DEFAULT_NVAPI_MODEL
 ): Promise<string[]> => {
     logger.info(`Generating follow-up questions for query: "${query.substring(0, 50)}..."`, CONTEXT);
 

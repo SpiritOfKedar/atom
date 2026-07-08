@@ -1,11 +1,13 @@
 import axios from 'axios';
 import { SearchResult, SearchType } from '../types';
-import { env } from '../config/env';
+import { env, isDev } from '../config/env';
+import { ApiError } from '../utils/apiError';
 import { logger } from '../utils/logger';
 import { getCachedSearchResults, cacheSearchResults } from './cache.service';
 import { retry } from '../utils/retry';
 
-const SERPER_API_URL = 'https://google.serper.dev/search';
+const SERPER_SEARCH_URL = 'https://google.serper.dev/search';
+const SERPER_NEWS_URL = 'https://google.serper.dev/news';
 const CONTEXT = 'SearchService';
 
 interface SerperOrganicResult {
@@ -15,53 +17,112 @@ interface SerperOrganicResult {
     favicon?: string;
 }
 
-interface SerperResponse {
-    organic: SerperOrganicResult[];
+interface SerperNewsResult {
+    title: string;
+    link: string;
+    snippet?: string;
+    source?: string;
+    date?: string;
+    imageUrl?: string;
+}
+
+interface SerperSearchResponse {
+    organic?: SerperOrganicResult[];
+}
+
+interface SerperNewsResponse {
+    news?: SerperNewsResult[];
 }
 
 /**
  * Builds search parameters based on search type.
  */
-const buildSearchParams = (query: string, numResults: number, searchType: SearchType): any => {
-    const baseParams: any = {
+const buildSearchParams = (query: string, numResults: number, searchType: SearchType): Record<string, unknown> => {
+    const baseParams: Record<string, unknown> = {
         q: query,
         num: numResults,
     };
 
-    // Add type-specific parameters
     switch (searchType) {
         case 'news':
-            // For news, we can add time-based filters or news-specific parameters
-            baseParams.tbs = 'qdr:w'; // Past week
+            // Prefer recent coverage without being so tight that Serper returns nothing.
+            baseParams.tbs = 'qdr:m';
             break;
         case 'academic':
-            // For academic searches, we can add site restrictions or academic domains
-            // Note: Serper API doesn't have direct academic search, but we can filter results
             baseParams.q = `${query} site:edu OR site:org OR site:gov OR site:ac.uk OR site:ac.za`;
             break;
         case 'web':
         default:
-            // Default web search, no additional params needed
             break;
     }
 
     return baseParams;
 };
 
+const mapOrganicResults = (items: SerperOrganicResult[], numResults: number): SearchResult[] =>
+    items.slice(0, numResults).map((item) => ({
+        title: item.title,
+        link: item.link,
+        snippet: item.snippet,
+        favicon: item.favicon || getFaviconUrl(item.link),
+    }));
+
+const mapNewsResults = (items: SerperNewsResult[], numResults: number): SearchResult[] =>
+    items.slice(0, numResults).map((item) => ({
+        title: item.title,
+        link: item.link,
+        snippet: item.snippet || (item.source ? `${item.source}${item.date ? ` · ${item.date}` : ''}` : item.title),
+        favicon: getFaviconUrl(item.link),
+    }));
+
+const postSerper = async <T>(
+    url: string,
+    body: Record<string, unknown>
+): Promise<T> => {
+    const response = await retry(
+        async () => {
+            return await axios.post<T>(url, body, {
+                headers: {
+                    'X-API-KEY': env.serperApiKey,
+                    'Content-Type': 'application/json',
+                },
+                timeout: 5000,
+            });
+        },
+        {
+            maxAttempts: 3,
+            initialDelayMs: 1000,
+            maxDelayMs: 5000,
+            backoffMultiplier: 2,
+            retryableErrors: (error: any) => {
+                if (error.code === 'ECONNRESET' || error.code === 'ETIMEDOUT') {
+                    return true;
+                }
+                if (error.response) {
+                    const status = error.response.status;
+                    return status >= 500 || status === 429;
+                }
+                return error.message?.includes('timeout') || false;
+            },
+        }
+    );
+
+    return response.data;
+};
+
 /**
  * Performs a web search using Serper.dev (Google Search API).
  * Supports different search types: web, news, academic.
- * Falls back to mock data if API key is not configured.
+ * News uses the dedicated /news endpoint, then falls back to web if empty.
+ * Falls back to mock data if API key is not configured in development.
  */
 export const searchWeb = async (
     query: string,
     numResults: number = 5,
     searchType: SearchType = 'web'
 ): Promise<SearchResult[]> => {
-    // Create cache key that includes search type
     const cacheKey = `${searchType}:${query}`;
-    
-    // Check cache first
+
     const cached = await getCachedSearchResults(cacheKey);
     if (cached && cached.length > 0) {
         logger.info(`Cache hit for ${searchType} search: "${query.substring(0, 50)}..."`, CONTEXT);
@@ -69,67 +130,67 @@ export const searchWeb = async (
     }
 
     if (!env.serperApiKey) {
-        logger.warn('SERPER_API_KEY not set, using mock search results', CONTEXT);
-        const mockResults = getMockResults(query, searchType);
-        await cacheSearchResults(cacheKey, mockResults);
-        return mockResults;
+        if (isDev) {
+            logger.warn('SERPER_API_KEY not set, using mock search results', CONTEXT);
+            const mockResults = getMockResults(query, searchType);
+            await cacheSearchResults(cacheKey, mockResults);
+            return mockResults;
+        }
+        throw ApiError.serviceUnavailable('Search service is not configured');
     }
 
     try {
         logger.info(`Searching (${searchType}) for: "${query}"`, CONTEXT);
 
-        const searchParams = buildSearchParams(query, numResults, searchType);
+        let results: SearchResult[] = [];
 
-        // Retry search API call with exponential backoff
-        const response = await retry(
-            async () => {
-                return await axios.post<SerperResponse>(
-                    SERPER_API_URL,
-                    searchParams,
-                    {
-                        headers: {
-                            'X-API-KEY': env.serperApiKey,
-                            'Content-Type': 'application/json',
-                        },
-                        timeout: 5000,
-                    }
+        if (searchType === 'news') {
+            const newsBody = buildSearchParams(query, numResults, 'news');
+            const newsData = await postSerper<SerperNewsResponse>(SERPER_NEWS_URL, newsBody);
+            results = mapNewsResults(newsData.news || [], numResults);
+
+            if (results.length === 0) {
+                logger.warn(
+                    `News search returned 0 results, falling back to web search for: "${query.substring(0, 50)}..."`,
+                    CONTEXT
                 );
-            },
-            {
-                maxAttempts: 3,
-                initialDelayMs: 1000,
-                maxDelayMs: 5000,
-                backoffMultiplier: 2,
-                retryableErrors: (error: any) => {
-                    // Retry on network errors, timeouts, and 5xx/429 status codes
-                    if (error.code === 'ECONNRESET' || error.code === 'ETIMEDOUT') {
-                        return true;
-                    }
-                    if (error.response) {
-                        const status = error.response.status;
-                        return status >= 500 || status === 429;
-                    }
-                    return error.message?.includes('timeout') || false;
-                },
+                const webData = await postSerper<SerperSearchResponse>(
+                    SERPER_SEARCH_URL,
+                    buildSearchParams(query, numResults, 'web')
+                );
+                results = mapOrganicResults(webData.organic || [], numResults);
             }
-        );
+        } else {
+            const searchParams = buildSearchParams(query, numResults, searchType);
+            const data = await postSerper<SerperSearchResponse>(SERPER_SEARCH_URL, searchParams);
+            results = mapOrganicResults(data.organic || [], numResults);
 
-        const results: SearchResult[] = response.data.organic.slice(0, numResults).map((item) => ({
-            title: item.title,
-            link: item.link,
-            snippet: item.snippet,
-            favicon: item.favicon || getFaviconUrl(item.link),
-        }));
+            // Academic site-filtering can be too narrow — retry plain web once.
+            if (results.length === 0 && searchType === 'academic') {
+                logger.warn(
+                    `Academic search returned 0 results, falling back to web search for: "${query.substring(0, 50)}..."`,
+                    CONTEXT
+                );
+                const webData = await postSerper<SerperSearchResponse>(
+                    SERPER_SEARCH_URL,
+                    buildSearchParams(query, numResults, 'web')
+                );
+                results = mapOrganicResults(webData.organic || [], numResults);
+            }
+        }
 
-        // Cache results with search type in key
-        await cacheSearchResults(cacheKey, results);
+        if (results.length > 0) {
+            await cacheSearchResults(cacheKey, results);
+        }
 
         logger.info(`Found ${results.length} ${searchType} search results`, CONTEXT);
         return results;
     } catch (error: any) {
         logger.error(`Search API failed after retries: ${error.message}`, CONTEXT, error);
-        // Fallback to mock on error
-        return getMockResults(query, searchType);
+        if (isDev) {
+            return getMockResults(query, searchType);
+        }
+        throw ApiError.serviceUnavailable('Search service is temporarily unavailable');
     }
 };
 
@@ -150,7 +211,7 @@ const getFaviconUrl = (url: string): string => {
  */
 const getMockResults = (query: string, searchType: SearchType = 'web'): SearchResult[] => {
     logger.debug(`Returning mock ${searchType} results for: "${query}"`, CONTEXT);
-    
+
     const baseResults: SearchResult[] = [
         {
             title: `Wikipedia - ${query}`,
@@ -194,7 +255,6 @@ const getMockResults = (query: string, searchType: SearchType = 'web'): SearchRe
         ];
     }
 
-    // Default web results
     return [
         ...baseResults,
         {

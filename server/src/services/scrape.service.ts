@@ -4,6 +4,7 @@ import { ScrapedContent } from '../types';
 import { logger } from '../utils/logger';
 import { getCachedScrapedContent, cacheScrapedContent } from './cache.service';
 import { retry, retryMultiple } from '../utils/retry';
+import { assertUrlSafeForFetch } from '../utils/url-safety';
 
 const CONTEXT = 'ScrapeService';
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
@@ -183,6 +184,8 @@ const calculateReadingTime = (content: string): number => {
  * Scrapes and cleans content from a single URL.
  */
 export const scrapePage = async (url: string): Promise<ScrapedContent> => {
+    assertUrlSafeForFetch(url);
+
     // Check cache first
     const cached = await getCachedScrapedContent(url);
     if (cached && cached.success) {

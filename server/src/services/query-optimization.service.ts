@@ -19,7 +19,7 @@ const CONTEXT = 'QueryOptimizationService';
  */
 export const optimizeQuery = async (
     query: string,
-    provider: ModelProvider = 'openai'
+    provider: ModelProvider = 'z-ai/glm-5.2'
 ): Promise<string> => {
     if (!query || query.trim().length === 0) {
         return query;
@@ -87,7 +87,7 @@ Improved query:`;
         return optimizedQuery;
 
     } catch (error: any) {
-        logger.error(`Query optimization failed: ${error.message}`, CONTEXT, error);
+        logger.warn(`Query optimization failed: ${error.message}`, CONTEXT);
         // Fallback to original query on error
         return trimmedQuery;
     }
