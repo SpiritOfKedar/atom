@@ -19,7 +19,7 @@ const WORDS_PER_MINUTE = 200; // Average reading speed
 /**
  * Extracts publication date from HTML.
  */
-const extractPublishedDate = ($: cheerio.Root, url: string): Date | undefined => {
+const extractPublishedDate = ($: cheerio.CheerioAPI, url: string): Date | undefined => {
     try {
         // Try meta tags first
         const dateSelectors = [
@@ -77,7 +77,7 @@ const extractPublishedDate = ($: cheerio.Root, url: string): Date | undefined =>
 /**
  * Extracts author information from HTML.
  */
-const extractAuthor = ($: cheerio.Root): string | undefined => {
+const extractAuthor = ($: cheerio.CheerioAPI): string | undefined => {
     try {
         // Try meta tags first
         const authorSelectors = [
