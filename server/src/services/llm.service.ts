@@ -378,6 +378,47 @@ REPHRASED QUERY:
     }
 };
 
+export type CompletionMode = 'rag' | 'direct';
+
+const formatModelLabel = (provider: ModelProvider): string => {
+    if (isNvapiModel(provider)) {
+        const shortNames: Record<string, string> = {
+            'mistralai/mistral-medium-3.5-128b': 'Mistral Medium 3.5',
+            'z-ai/glm-5.2': 'GLM-5.2',
+            'nvidia/nemotron-3-ultra-550b-a55b': 'Nemotron 3 Ultra',
+            'minimaxai/minimax-m3': 'MiniMax M3',
+            'deepseek-ai/deepseek-v4-pro': 'DeepSeek V4 Pro',
+            'deepseek-ai/deepseek-v4-flash': 'DeepSeek V4 Flash',
+        };
+        return shortNames[provider] || provider;
+    }
+
+    switch (provider) {
+        case 'openai':
+            return 'GPT-4o mini (OpenAI)';
+        case 'claude':
+            return 'Claude 3.5 Haiku (Anthropic)';
+        case 'gemini':
+            return 'Gemini 2.5 Flash (Google)';
+        default:
+            return provider;
+    }
+};
+
+const buildDirectSystemPrompt = (provider: ModelProvider): string => {
+    const modelLabel = formatModelLabel(provider);
+    return `You are Atom, a helpful AI research assistant. For this message you are answering directly without web search results.
+
+The user is currently using: ${modelLabel} (provider id: ${provider}).
+
+Instructions:
+1. Answer conversationally and helpfully using general knowledge, prior conversation, and any provided memories.
+2. For questions about Atom, yourself, or which model is active, use the model information above.
+3. Do not invent citations or pretend you searched the web. If the user asks for current events or facts you cannot verify, say so and suggest they ask a question that would benefit from a web search.
+4. Use clean Markdown when helpful. Keep meta questions brief; go deeper only when the user asks for detail.
+5. Sources labeled "Memory" are past interactions with this user — use them when relevant.`;
+};
+
 const SYSTEM_PROMPT = `You are a helpful AI research assistant that provides accurate, well-sourced answers based on the provided context.
 
 Instructions:
@@ -469,6 +510,54 @@ ${styleInstructions}
 Always include citations [1], [2], etc. to the relevant sources for any factual claims. Ensure every major claim has at least one citation.`;
 };
 
+const buildDirectPrompt = (
+    query: string,
+    contexts: RAGContext[],
+    conversationHistory?: IMessage[],
+    answerStyle: AnswerStyle = 'detailed'
+): string => {
+    const memoryContexts = contexts.filter((ctx) => ctx.url === 'memory://internal');
+
+    let contextSection = '';
+    if (memoryContexts.length > 0) {
+        const memorySection = memoryContexts
+            .map((ctx) => `[${ctx.index}] ${ctx.title}\n${ctx.content}`)
+            .join('\n\n');
+        contextSection = `MEMORIES FROM PAST INTERACTIONS:\n${memorySection}\n\n`;
+    }
+
+    const historySection =
+        conversationHistory && conversationHistory.length > 0
+            ? `Previous conversation:\n${conversationHistory
+                .map((msg) => {
+                    const speaker = msg.role === 'user' ? 'User' : 'Assistant';
+                    return `${speaker}: ${msg.content}`;
+                })
+                .join('\n')}\n\n`
+            : '';
+
+    let styleInstructions: string;
+    switch (answerStyle) {
+        case 'concise':
+            styleInstructions = 'Provide a concise answer in 1-2 short paragraphs.';
+            break;
+        case 'bullet-points':
+            styleInstructions = 'Provide the answer primarily as a clear bullet-point list.';
+            break;
+        case 'detailed':
+        default:
+            styleInstructions =
+                'Provide a clear, well-structured Markdown answer. Match depth to the question — simple questions get brief answers.';
+            break;
+    }
+
+    return `Answer the user's question directly.
+
+${historySection}${contextSection}USER QUESTION: ${query}
+
+${styleInstructions}`;
+};
+
 /**
  * Streams a response from the active LLM provider to the Express response object.
  * Uses native streaming APIs for all providers (NVIDIA NIM, OpenAI, Claude, Gemini).
@@ -482,9 +571,14 @@ export const streamCompletion = async (
     onToken?: (token: string) => void,
     conversationHistory?: IMessage[],
     answerStyle: AnswerStyle = 'detailed',
-    provider: ModelProvider = DEFAULT_NVAPI_MODEL
+    provider: ModelProvider = DEFAULT_NVAPI_MODEL,
+    mode: CompletionMode = 'rag'
 ): Promise<string> => {
-    const prompt = buildPrompt(query, contexts, conversationHistory, answerStyle);
+    const prompt =
+        mode === 'direct'
+            ? buildDirectPrompt(query, contexts, conversationHistory, answerStyle)
+            : buildPrompt(query, contexts, conversationHistory, answerStyle);
+    const systemPrompt = mode === 'direct' ? buildDirectSystemPrompt(provider) : SYSTEM_PROMPT;
     const preferred = resolveModelProvider(provider);
 
     logger.info(`Streaming completion for query: "${query.substring(0, 50)}..."`, CONTEXT);
@@ -516,7 +610,7 @@ export const streamCompletion = async (
             const stream = await nvidia.chat.completions.create({
                 model,
                 messages: [
-                    { role: 'system', content: SYSTEM_PROMPT },
+                    { role: 'system', content: systemPrompt },
                     { role: 'user', content: prompt },
                 ],
                 stream: true,
@@ -533,7 +627,7 @@ export const streamCompletion = async (
             const stream = await openai.chat.completions.create({
                 model,
                 messages: [
-                    { role: 'system', content: SYSTEM_PROMPT },
+                    { role: 'system', content: systemPrompt },
                     { role: 'user', content: prompt },
                 ],
                 stream: true,
@@ -549,7 +643,7 @@ export const streamCompletion = async (
             const anthropic = getAnthropicClient();
             const stream = anthropic.messages.stream({
                 model,
-                system: SYSTEM_PROMPT,
+                system: systemPrompt,
                 messages: [{ role: 'user', content: prompt }],
                 temperature: 0.3,
                 max_tokens: 3072,
@@ -568,7 +662,7 @@ export const streamCompletion = async (
             const genAI = getGeminiClient();
             const modelClient = genAI.getGenerativeModel({ model });
             const result = await modelClient.generateContentStream({
-                systemInstruction: SYSTEM_PROMPT,
+                systemInstruction: systemPrompt,
                 contents: [{ role: 'user', parts: [{ text: prompt }] }],
                 generationConfig: {
                     temperature: 0.3,
@@ -583,7 +677,7 @@ export const streamCompletion = async (
         } else {
             const completion = await completeText({
                 provider: activeProvider,
-                systemPrompt: SYSTEM_PROMPT,
+                systemPrompt,
                 userPrompt: prompt,
                 temperature: 0.3,
                 maxTokens: 3072,

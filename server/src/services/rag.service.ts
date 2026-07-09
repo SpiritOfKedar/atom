@@ -7,6 +7,7 @@ import { logger } from '../utils/logger';
 import { IMessage } from '../models/conversation.model';
 import { rankSources } from './source-ranking.service';
 import { optimizeQuery, suggestSearchType } from './query-optimization.service';
+import { shouldSkipWebSearch } from './query-routing.service';
 import { RankedSource } from '../types';
 import { searchMemory, storeMemory, MemoryResult } from './vector-store.service';
 
@@ -97,6 +98,55 @@ const deduplicateSources = (sources: RankedSource[]): RankedSource[] => {
     return deduplicated;
 };
 
+const buildMemoryContexts = (memories: MemoryResult[]): RAGContext[] => {
+    let contextIndex = 1;
+    return memories.map((mem) => ({
+        index: contextIndex++,
+        title: `Memory: ${mem.metadata?.date ? new Date(mem.metadata.date).toLocaleDateString() : 'Past Interaction'}`,
+        url: 'memory://internal',
+        content: mem.content,
+    }));
+};
+
+const runDirectCompletion = async (
+    query: string,
+    res: Response,
+    memories: MemoryResult[],
+    onToken?: (token: string) => void,
+    conversationHistory?: IMessage[],
+    answerStyle: AnswerStyle = 'detailed',
+    modelProvider: ModelProvider = 'mistralai/mistral-medium-3.5-128b',
+    userId?: string,
+    memoryEnabled = false,
+    effectiveQuery?: string
+): Promise<RAGPipelineResult> => {
+    const ragContexts = buildMemoryContexts(memories);
+
+    sendStatus(res, 'Generating answer...');
+    const fullAnswer = await streamCompletion(
+        query,
+        ragContexts,
+        res,
+        onToken,
+        conversationHistory,
+        answerStyle,
+        modelProvider,
+        'direct'
+    );
+
+    if (memoryEnabled && userId && fullAnswer && fullAnswer.length > 50) {
+        storeMemory(userId, `Q: ${effectiveQuery || query}\nA: ${fullAnswer}`, {
+            tags: ['conversation', 'direct'],
+        }).catch((err) => logger.error(`Failed to store memory: ${err.message}`, CONTEXT));
+    }
+
+    return {
+        sources: [],
+        ragContexts,
+        success: true,
+    };
+};
+
 /**
  * Runs the complete RAG pipeline:
  * 1. Search the web for relevant sources
@@ -167,6 +217,26 @@ export const runRAGPipeline = async (
         );
     }
 
+    if (shouldSkipWebSearch(query, effectiveQuery)) {
+        if (!shouldContinue()) {
+            logger.info('Client disconnected before direct completion, aborting pipeline', CONTEXT);
+            return { sources: [], ragContexts: [], success: false };
+        }
+
+        return runDirectCompletion(
+            query,
+            res,
+            memories,
+            onToken,
+            conversationHistory,
+            answerStyle,
+            modelProvider,
+            userId,
+            memoryEnabled,
+            effectiveQuery
+        );
+    }
+
     const searchStatusMessage = effectiveSearchType === 'news'
         ? 'Searching news...'
         : effectiveSearchType === 'academic'
@@ -192,7 +262,25 @@ export const runRAGPipeline = async (
     }
 
     if (searchResults.length === 0) {
-        throw new Error('No search results found');
+        logger.info('No search results found, falling back to direct LLM completion', CONTEXT);
+
+        if (!shouldContinue()) {
+            logger.info('Client disconnected before direct completion fallback, aborting pipeline', CONTEXT);
+            return { sources: [], ragContexts: [], success: false };
+        }
+
+        return runDirectCompletion(
+            query,
+            res,
+            memories,
+            onToken,
+            conversationHistory,
+            answerStyle,
+            modelProvider,
+            userId,
+            memoryEnabled,
+            effectiveQuery
+        );
     }
 
     // Send initial sources (will be re-sent after ranking)
@@ -219,20 +307,8 @@ export const runRAGPipeline = async (
     rankedSources = deduplicateSources(rankedSources);
 
     // Build RAG contexts from ranked sources (highest score first)
-    const ragContexts: RAGContext[] = [];
-    let contextIndex = 1; // Use sequential positive indices for all contexts
-
-    // 1. Add Memories first (High priority context)
-    memories.forEach((mem) => {
-        ragContexts.push({
-            index: contextIndex++,
-            title: `Memory: ${mem.metadata?.date ? new Date(mem.metadata.date).toLocaleDateString() : 'Past Interaction'}`,
-            url: 'memory://internal',
-            content: mem.content,
-        });
-    });
-
-    // 2. Add Web Results
+    const ragContexts: RAGContext[] = [...buildMemoryContexts(memories)];
+    let contextIndex = ragContexts.length + 1;
     // Use intelligent content extraction with different max lengths based on rank
     const webContexts = rankedSources
         .filter((rs) => {
