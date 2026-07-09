@@ -8,6 +8,7 @@ import * as conversationService from '../services/conversation.service';
 import { IMessage } from '../models/conversation.model';
 import { validateAnswer } from '../services/answer-validation.service';
 import { generateFollowUpQuestions } from '../services/llm.service';
+import { evaluateInput, getBlockedResponse } from '../services/guardrails.service';
 import mongoose from 'mongoose';
 import { getRedisClient } from '../config/redis';
 import { env } from '../config/env';
@@ -120,6 +121,15 @@ export const handleChat = async (req: Request, res: Response): Promise<void> => 
     let conversationHistory: IMessage[] | undefined;
 
     try {
+        const inputGuard = evaluateInput(sanitizedQuery);
+        if (inputGuard.action === 'block') {
+            const blockedResponse = getBlockedResponse();
+            safeWrite(res, { type: 'token', data: blockedResponse });
+            fullAnswer = blockedResponse;
+            res.end();
+            return;
+        }
+
         if (authReq.userId && conversationId) {
             try {
                 const existingConversation = await conversationService.getConversationById(
